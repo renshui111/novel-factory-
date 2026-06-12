@@ -106,6 +106,9 @@ class NovelFactoryGUI:
             ("cover",    "??"),
             ("review",   "??"),
             ("output",   "??"),
+            ("bookshelf", "??"),
+            ("bookshelf", "??"),
+            ("bookshelf", "??"),
         ]
         emojis = {
             "settings": "gear", "create": "pencil", "batch": "package",
@@ -163,7 +166,7 @@ class NovelFactoryGUI:
         self.main_area = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
         self.main_area.pack(side="right", fill="both", expand=True)
 
-        names = ["settings", "create", "batch", "analyze", "deslop", "cover", "review", "output"]
+        names = ["settings", "create", "batch", "analyze", "deslop", "cover", "review", "output", "bookshelf"]
         self.pages = {}
         for n in names:
             self.pages[n] = ctk.CTkFrame(self.main_area, fg_color=BG, corner_radius=0)
@@ -175,6 +178,7 @@ class NovelFactoryGUI:
         self._build_cover()
         self._build_review()
         self._build_output()
+        self._build_bookshelf()
 
     # ??????????????????????????????????????
     # ??: Settings
@@ -1366,4 +1370,42 @@ class NovelFactoryGUI:
         
             import threading
             threading.Thread(target=task, daemon=True).start()
+
+    def _build_bookshelf(self):
+        p = self.pages.get("bookshelf")
+        if not p:
+            return
+        self._sect(p, "书架")
+        from core import get_output_dir
+        if not os.path.exists(output_dir):
+            ctk.CTkLabel(p, text="暂无书籍").pack(pady=20)
+            return
+        for name in sorted(os.listdir(output_dir)):
+            book_dir = os.path.join(output_dir, name)
+            if not os.path.isdir(book_dir):
+                continue
+            ch_dir = os.path.join(book_dir, "正文")
+            ch_count = len([f for f in os.listdir(ch_dir) if f.endswith(".md")]) if os.path.exists(ch_dir) else 0
+            card = ctk.CTkFrame(p, fg_color=CARD)
+            card.pack(fill="x", padx=20, pady=5)
+            ctk.CTkLabel(card, text=name + "  (" + str(ch_count) + " 章)",
+                font=("Microsoft YaHei", 14, "bold"), text_color=ACCENT).pack(anchor="w", padx=15, pady=(10,2))
+            bf = ctk.CTkFrame(card, fg_color="transparent")
+            bf.pack(fill="x", padx=15, pady=(0,10))
+            ctk.CTkButton(bf, text="续写", width=60,
+                command=lambda d=book_dir: self._continue_from_shelf(d)).pack(side="left", padx=2)
+            ctk.CTkButton(bf, text="导出", width=60,
+                command=lambda d=book_dir: self._export_from_shelf(d)).pack(side="left", padx=2)
+
+    def _continue_from_shelf(self, book_dir):
+        self._book_dir = book_dir
+        self._show_page("create")
+        self._run_continue()
+
+    def _export_from_shelf(self, book_dir):
+        self._show_page("output")
+
+    def _on_close(self):
+        self.stop_flag.set()
+        self.root.destroy()
 
