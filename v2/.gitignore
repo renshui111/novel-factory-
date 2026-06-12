@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+*.egg
+
+# 配置（含 API key）
+config.json
+
+# PyInstaller
+*.manifest
+*.pkg
+
+# 崩溃日志
+crash.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 小说产出（用户数据，不提交）
+output/
