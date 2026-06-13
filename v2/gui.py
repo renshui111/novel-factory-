@@ -32,8 +32,6 @@ from export import (
 from editor import edit_chapter, edit_dialogue, add_scene, EditHistory
 from reader_sim import simulate_reader, simulate_all_readers, predict_abandonment, get_readability_score
 from reverse_engineer import reverse_engineer, apply_formula_to_new_book
-from voice_preview import generate_voice_script, export_voice_script_as_text, preview_first_lines
-from leaderboard import simulate_leaderboard, compare_books, generate_leaderboard_report
 
 BG = "#111318"
 SB = "#181b23"
@@ -122,15 +120,12 @@ class NovelFactoryGUI:
             ("analyze",   "  拆书"),
             ("reverse",   "  逆向工程"),
             ("reader",    "  读者模拟"),
-            ("leaderboard", "  排行榜"),
-            ("voice",     "  配音预览"),
             ("settings",  "  设置"),
         ]
         emojis = {
             "bookshelf": "books", "create": "pencil",
             "editor": "pen-nib", "analyze": "mag",
             "reverse": "cube", "reader": "people",
-            "leaderboard": "chart", "voice": "speaker",
             "settings": "gear",
         }
         for key, label in items:
@@ -193,7 +188,7 @@ class NovelFactoryGUI:
         self.main_area = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
         self.main_area.pack(side="right", fill="both", expand=True)
 
-        names = ["bookshelf", "create", "editor", "analyze", "reverse", "reader", "leaderboard", "voice", "settings"]
+        names = ["bookshelf", "create", "editor", "analyze", "reverse", "reader", "settings"]
         self.pages = {}
         for n in names:
             self.pages[n] = ctk.CTkFrame(self.main_area, fg_color=BG, corner_radius=0)
@@ -203,8 +198,6 @@ class NovelFactoryGUI:
         self._build_reverse()
         self._build_editor_page()
         self._build_reader()
-        self._build_leaderboard()
-        self._build_voice()
         self._build_settings()
 
     # ══════════════════════════════════════
@@ -3160,41 +3153,166 @@ class NovelFactoryGUI:
     # ══════════════════════════════════════
     # 页面: 读者模拟
     # ══════════════════════════════════════
+        # ══════════════════════════════════════
+    # 页面: 读者模拟 (全书支持)
+    # ══════════════════════════════════════
     def _build_reader(self):
         p = self.pages["reader"]
-        self._sect(p, "AI读者模拟")
+        self._sect(p, "AI读者模拟 — 全书分析")
         scroll = ctk.CTkScrollableFrame(p, fg_color=BG)
         scroll.pack(fill="both", expand=True, padx=16, pady=(0, 12))
 
-        ctk.CTkLabel(scroll, text="章节内容（粘贴到下方）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
-        self._reader_text = ctk.CTkTextbox(scroll, height=180, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
+        # ── Tab bar ──
+        tab_bar = ctk.CTkFrame(scroll, fg_color="transparent")
+        tab_bar.pack(fill="x", pady=(4, 8))
+        self._reader_tab = ctk.StringVar(value="single")
+        ctk.CTkSegmentedButton(tab_bar, values=["single", "fullbook"], variable=self._reader_tab,
+                               font=("Microsoft YaHei", 12), selected_color=ACCENT,
+                               command=self._on_reader_tab_change).pack(side="left")
+
+        # ── Single chapter panel ──
+        self._reader_single_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        ctk.CTkLabel(self._reader_single_frame, text="章节内容（粘贴到下方）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
+        self._reader_text = ctk.CTkTextbox(self._reader_single_frame, height=160, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
         self._reader_text.pack(fill="x", pady=(0, 8))
 
-        # Reader type selection
-        bf = ctk.CTkFrame(scroll, fg_color="transparent")
-        bf.pack(fill="x", pady=(4, 8))
+        sf = ctk.CTkFrame(self._reader_single_frame, fg_color="transparent")
+        sf.pack(fill="x", pady=(4, 8))
         self._reader_type_var = ctk.StringVar(value="all")
-        ctk.CTkLabel(bf, text="读者类型：", font=("Microsoft YaHei", 12), text_color=TEXT).pack(side="left", padx=(0, 8))
-        for rt, label in [("all", "全部"), ("hardcore", "硬核书迷"), ("casual", "小白读者"), ("editor", "编辑视角")]:
-            ctk.CTkRadioButton(bf, text=label, variable=self._reader_type_var, value=rt,
-                               font=("Microsoft YaHei", 11), text_color=TEXT, fg_color=ACCENT).pack(side="left", padx=6)
-
-        # Chapter number
-        ctk.CTkLabel(bf, text="  章节号：", font=("Microsoft YaHei", 12), text_color=TEXT).pack(side="left")
-        self._reader_ch_num = ctk.CTkEntry(bf, width=50, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT)
+        ctk.CTkLabel(sf, text="读者：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
+        for rt, label in [("all", "全部"), ("hardcore", "硬核"), ("casual", "小白"), ("editor", "编辑"), ("fangirl", "粉丝"), ("skeptic", "喷子"), ("newcomer", "路人")]:
+            ctk.CTkRadioButton(sf, text=label, variable=self._reader_type_var, value=rt,
+                               font=("Microsoft YaHei", 10), text_color=TEXT, fg_color=ACCENT).pack(side="left", padx=3)
+        ctk.CTkLabel(sf, text=" 章号：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
+        self._reader_ch_num = ctk.CTkEntry(sf, width=45, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT)
         self._reader_ch_num.insert(0, "1")
-        self._reader_ch_num.pack(side="left", padx=4)
+        self._reader_ch_num.pack(side="left", padx=3)
+        ctk.CTkButton(sf, text="分析本章", command=self._run_reader_sim,
+                      fg_color=ACCENT, font=("Microsoft YaHei", 12), width=90).pack(side="right", padx=2)
 
-        ctk.CTkButton(bf, text="模拟读者", command=self._run_reader_sim,
-                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=120).pack(side="right", padx=3)
-        ctk.CTkButton(bf, text="可读性分析", command=self._run_readability,
-                      fg_color=BLUE, width=100).pack(side="right", padx=3)
+        # ── Full book panel ──
+        self._reader_full_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        ctk.CTkLabel(self._reader_full_frame, text="导入全书文件（.txt / .md）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
+        ff = ctk.CTkFrame(self._reader_full_frame, fg_color=CARD_HOVER, corner_radius=6)
+        ff.pack(fill="x", pady=(0, 8))
+        self._reader_book_path = ctk.StringVar(value="")
+        ctk.CTkEntry(ff, textvariable=self._reader_book_path, font=("Microsoft YaHei", 10),
+                     fg_color=CARD, text_color=TEXT, height=32).pack(side="left", fill="x", expand=True, padx=8, pady=6)
+        ctk.CTkButton(ff, text="浏览", command=self._browse_reader_book, width=55).pack(side="right", padx=4)
 
-        # Results
-        self._reader_result = ctk.CTkTextbox(scroll, height=350, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
+        bf2 = ctk.CTkFrame(self._reader_full_frame, fg_color="transparent")
+        bf2.pack(fill="x", pady=(4, 8))
+        self._reader_full_btn = ctk.CTkButton(bf2, text="全本分析（6种读者）", command=self._run_full_book_analysis,
+                                              fg_color=ACCENT, font=("Microsoft YaHei", 13), width=180)
+        self._reader_full_btn.pack(side="left", padx=3)
+        ctk.CTkButton(bf2, text="导出报告(MD)", command=self._export_reader_report,
+                      fg_color=BLUE, width=110).pack(side="left", padx=3)
+        ctk.CTkButton(bf2, text="可读性扫描", command=self._run_readability,
+                      fg_color="#555", width=100).pack(side="left", padx=3)
+
+        self._reader_full_status = ctk.CTkLabel(self._reader_full_frame, text="", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
+        self._reader_full_status.pack(anchor="w")
+
+        # ── Result area (shared) ──
+        ctk.CTkLabel(scroll, text="分析结果", font=("Microsoft YaHei", 12, "bold"), text_color=ACCENT).pack(anchor="w", pady=(8, 4))
+        self._reader_result = ctk.CTkTextbox(scroll, height=400, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
         self._reader_result.pack(fill="both", expand=True)
-        self._reader_status = ctk.CTkLabel(scroll, text="就绪", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
-        self._reader_status.pack(anchor="w", pady=(4, 8))
+
+        # Navigation for full-book chapter detail
+        navf = ctk.CTkFrame(scroll, fg_color="transparent")
+        navf.pack(fill="x", pady=(6, 8))
+        ctk.CTkLabel(navf, text="查看章节详情：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
+        self._reader_ch_detail = ctk.CTkEntry(navf, width=60, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT)
+        self._reader_ch_detail.insert(0, "1")
+        self._reader_ch_detail.pack(side="left", padx=4)
+        ctk.CTkButton(navf, text="跳转", command=self._reader_goto_chapter,
+                      fg_color=ACCENT, width=50, height=26).pack(side="left", padx=2)
+        self._reader_status = ctk.CTkLabel(navf, text="就绪", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
+        self._reader_status.pack(side="left", padx=10)
+
+        # State
+        self._last_reader_analysis = None  # Full-book analysis result
+        self._reader_book_data = None  # load_book result
+
+        # Show single panel by default
+        self._reader_single_frame.pack(fill="x")
+        self._reader_tab.set("single")
+
+    def _on_reader_tab_change(self, val):
+        if val == "single":
+            self._reader_full_frame.pack_forget()
+            self._reader_single_frame.pack(fill="x", before=self._reader_result.master.winfo_children()[self._reader_result.master.winfo_children().index(self._reader_result)])
+        else:
+            self._reader_single_frame.pack_forget()
+            self._reader_full_frame.pack(fill="x", before=self._reader_result)
+
+    def _browse_reader_book(self):
+        path = filedialog.askopenfilename(filetypes=[("文本文件", "*.txt *.md"), ("所有文件", "*.*")])
+        if path:
+            self._reader_book_path.set(path)
+
+    def _run_full_book_analysis(self):
+        path = self._reader_book_path.get().strip()
+        if not path or not os.path.isfile(path):
+            self._reader_full_status.configure(text="请选择有效的文件")
+            return
+        self._reader_full_status.configure(text="正在加载+切分章节...", text_color=TEXT)
+        self._reader_result.delete("1.0", "end")
+        self._reader_full_btn.configure(state="disabled", text="分析中...")
+        def task():
+            # Load book
+            book = load_book(path)
+            if "error" in book:
+                self.root.after(0, lambda: self._reader_full_status.configure(text=book["error"], text_color=RED))
+                self.root.after(0, lambda: self._reader_full_btn.configure(state="normal", text="全本分析（6种读者）"))
+                return
+            self._reader_book_data = book
+            self.root.after(0, lambda: self._reader_full_status.configure(
+                text=f"已加载: {book['title']} ({book['total_chapters']}章, {book['total_words']:,}字)，正在逐章分析...",
+                text_color=TEXT))
+            # Analyze
+            def log(msg):
+                self.root.after(0, lambda: self._reader_full_status.configure(text=msg, text_color=TEXT))
+            result = analyze_full_book(book, log_callback=log)
+            self._last_reader_analysis = result
+            report = generate_full_book_report(result)
+            def show():
+                self._reader_result.delete("1.0", "end")
+                self._reader_result.insert("1.0", report)
+                overall = result.get("overall", {})
+                self._reader_full_status.configure(
+                    text=f"分析完成 | 综合评分: {overall.get('avg_score', 0)}/10 | 趋势: {overall.get('score_trend_desc', '')} | 弃书风险: {overall.get('abandonment_risk', {}).get('risk', '')}",
+                    text_color=GREEN)
+                self._reader_full_btn.configure(state="normal", text="全本分析（6种读者）")
+                self._reader_status.configure(text=f"共{result['total_chapters']}章，点击「跳转」查看单章详情")
+            self.root.after(0, show)
+        import threading
+        threading.Thread(target=task, daemon=True).start()
+
+    def _reader_goto_chapter(self):
+        if not self._last_reader_analysis:
+            self._reader_status.configure(text="请先进行全本分析")
+            return
+        try:
+            ch = int(self._reader_ch_detail.get())
+        except ValueError:
+            ch = 1
+        report = generate_chapter_feedback_report(self._last_reader_analysis, ch)
+        self._reader_result.delete("1.0", "end")
+        self._reader_result.insert("1.0", report)
+        self._reader_status.configure(text=f"已跳转到第{ch}章详情")
+        self._reader_ch_detail.delete(0, "end")
+        self._reader_ch_detail.insert(0, str(ch + 1))
+
+    def _export_reader_report(self):
+        if not self._last_reader_analysis:
+            self._reader_status.configure(text="请先进行全本分析")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".md", filetypes=[("Markdown", "*.md")])
+        if path:
+            report = generate_full_book_report(self._last_reader_analysis)
+            write_file(path, report)
+            self._reader_status.configure(text=f"报告已导出: {path}", text_color=GREEN)
 
     def _run_reader_sim(self):
         text = self._reader_text.get("1.0", "end-1c").strip()
@@ -3209,52 +3327,61 @@ class NovelFactoryGUI:
         self._reader_status.configure(text="AI读者正在阅读...")
         self._reader_result.delete("1.0", "end")
         def task():
-            if rtype == "all":
-                results = simulate_all_readers(text, ch_num)
-                def show():
-                    self._reader_result.delete("1.0", "end")
-                    for r in results:
-                        self._reader_result.insert("end", f"\n{'='*40}\n### {r.get('reader_name', '')}\n{'='*40}\n{r.get('feedback', r.get('error', ''))}\n")
-                    self._reader_status.configure(text="三种读者模拟完成 ✓", text_color=GREEN)
-                self.root.after(0, show)
-            else:
-                result = simulate_reader(text, rtype, ch_num)
-                def show():
-                    self._reader_result.delete("1.0", "end")
-                    self._reader_result.insert("1.0", result.get("feedback", result.get("error", "")))
-                    self._reader_status.configure(text=f"{result.get('reader_name', '')} 反馈完成 ✓", text_color=GREEN)
-                self.root.after(0, show)
+            rtypes = None if rtype == "all" else [rtype]
+            results = simulate_all_readers(text, ch_num, reader_types=rtypes)
+            def show():
+                self._reader_result.delete("1.0", "end")
+                for r in results:
+                    self._reader_result.insert("end",
+                        f"\n{'='*40}\n### {r.get('reader_name', '?')}\n{'='*40}\n{r.get('feedback', r.get('error', ''))}\n")
+                self._reader_status.configure(text="分析完成 ✓", text_color=GREEN)
+            self.root.after(0, show)
         import threading
         threading.Thread(target=task, daemon=True).start()
 
     def _run_readability(self):
-        text = self._reader_text.get("1.0", "end-1c").strip()
-        if not text:
-            self._reader_status.configure(text="请填写章节内容")
-            return
-        score = get_readability_score(text)
-        self._reader_result.delete("1.0", "end")
-        lines = [
-            "📊 可读性分析（纯规则，不调AI）",
-            "=" * 40,
-            f"平均句长：{score['avg_sentence_length']} 字符",
-            f"段落数：{score['paragraph_count']}",
-            f"平均段落长：{score['avg_paragraph_length']} 字符",
-            f"段落长度方差：{score['paragraph_variance']}（越大变化越多）",
-            f"对话占比：{score['dialogue_ratio']:.2%}",
-            f"总句数：{score['total_sentences']}",
-            "",
-            "💡 解读：",
-            "平均句长 < 20 → 太碎；> 60 → 太长",
-            "对话占比 20%-40% → 网文黄金区间",
-            "段落方差大 → 张弛有度",
-        ]
-        self._reader_result.insert("1.0", "\n".join(lines))
-        self._reader_status.configure(text="可读性分析完成 ✓", text_color=GREEN)
+        # If full book loaded, scan all chapters
+        if self._reader_book_data:
+            chs = self._reader_book_data.get("chapters", [])
+            lines = ["📊 全书可读性扫描", "=" * 40, f"总章节: {len(chs)}", ""]
+            total_ai = 0
+            for ch in chs:
+                rd = get_readability_score(ch["text"])
+                ai_hits = scan_ai_markers(ch["text"])
+                total_ai += len(ai_hits)
+                lines.append(
+                    f"第{ch['num']:>3}章 | 句长:{rd['avg_sentence_length']:5.0f} | "
+                    f"段数:{rd['paragraph_count']:>3} | 对话比:{rd['dialogue_ratio']:.1%} | "
+                    f"AI痕:{len(ai_hits):>2}")
+            lines += ["", f"全书AI痕迹总计: {total_ai} 处"]
+            self._reader_result.delete("1.0", "end")
+            self._reader_result.insert("1.0", "\n".join(lines))
+            self._reader_status.configure(text=f"可读性扫描完成，共{len(chs)}章")
+        else:
+            text = self._reader_text.get("1.0", "end-1c").strip()
+            if not text:
+                self._reader_status.configure(text="请填写章节内容或导入全书")
+                return
+            score = get_readability_score(text)
+            ai_hits = scan_ai_markers(text)
+            self._reader_result.delete("1.0", "end")
+            lines = [
+                "📊 可读性分析（纯规则）",
+                "=" * 40,
+                f"平均句长：{score['avg_sentence_length']} 字符（<20太碎，>60太长）",
+                f"段落数：{score['paragraph_count']}",
+                f"平均段落长：{score['avg_paragraph_length']} 字符",
+                f"段落长度方差：{score['paragraph_variance']}（大=张弛有度）",
+                f"对话占比：{score['dialogue_ratio']:.1%}（20%-40%=网文黄金区间）",
+                f"总句数：{score['total_sentences']}",
+                f"AI痕迹：{len(ai_hits)} 处",
+            ]
+            if ai_hits:
+                lines.append(f"  → {', '.join(h['marker'] for h in ai_hits[:8])}")
+            self._reader_result.insert("1.0", "\n".join(lines))
+            self._reader_status.configure(text="可读性分析完成 ✓", text_color=GREEN)
 
-    # ══════════════════════════════════════
-    # 页面: 逆向工程
-    # ══════════════════════════════════════
+
     def _build_reverse(self):
         p = self.pages["reverse"]
         self._sect(p, "逆向工程畅销书")
@@ -3340,162 +3467,6 @@ class NovelFactoryGUI:
     # ══════════════════════════════════════
     # 页面: 排行榜模拟
     # ══════════════════════════════════════
-    def _build_leaderboard(self):
-        p = self.pages["leaderboard"]
-        self._sect(p, "排行榜模拟器")
-        scroll = ctk.CTkScrollableFrame(p, fg_color=BG)
-        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 12))
-
-        # Book info
-        ctk.CTkLabel(scroll, text="作品信息", font=("Microsoft YaHei", 12, "bold"), text_color=ACCENT).pack(anchor="w", pady=(8, 4))
-        inf = ctk.CTkFrame(scroll, fg_color="transparent")
-        inf.pack(fill="x", pady=(0, 8))
-        ctk.CTkLabel(inf, text="书名：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
-        self._lb_book_name = ctk.CTkEntry(inf, width=200, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT)
-        self._lb_book_name.pack(side="left", padx=(4, 16))
-        ctk.CTkLabel(inf, text="类型：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
-        self._lb_genre = ctk.CTkComboBox(inf, values=["玄幻", "仙侠", "都市", "历史", "科幻", "游戏", "悬疑", "言情", "轻小说"],
-                                          font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, button_color=ACCENT,
-                                          width=100, state="readonly")
-        self._lb_genre.set("玄幻")
-        self._lb_genre.pack(side="left", padx=4)
-
-        # Chapter input
-        ctk.CTkLabel(scroll, text="章节内容（粘贴多章，用空行分隔）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
-        self._lb_text = ctk.CTkTextbox(scroll, height=180, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
-        self._lb_text.pack(fill="x", pady=(0, 8))
-
-        # Buttons
-        bf = ctk.CTkFrame(scroll, fg_color="transparent")
-        bf.pack(fill="x", pady=(4, 8))
-        ctk.CTkButton(bf, text="模拟排行榜", command=self._run_leaderboard,
-                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=140).pack(side="left", padx=3)
-        ctk.CTkButton(bf, text="导出报告(MD)", command=self._export_lb_report,
-                      fg_color=BLUE, width=120).pack(side="left", padx=3)
-
-        # Result
-        self._lb_result = ctk.CTkTextbox(scroll, height=380, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
-        self._lb_result.pack(fill="both", expand=True)
-        self._lb_status = ctk.CTkLabel(scroll, text="就绪", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
-        self._lb_status.pack(anchor="w", pady=(4, 8))
-
-        # Store last result
-        self._last_lb_result = None
-
-    def _run_leaderboard(self):
-        text = self._lb_text.get("1.0", "end-1c").strip()
-        if not text:
-            self._lb_status.configure(text="请填写章节内容")
-            return
-        # Parse chapters
-        parts = [p.strip() for p in text.split("\n\n") if p.strip()]
-        chapters = [(i+1, p, len(p)) for i, p in enumerate(parts)]
-        name = self._lb_book_name.get().strip() or "未命名作品"
-        genre = self._lb_genre.get()
-        wc = sum(len(p) for _, p, _ in chapters)
-        self._lb_status.configure(text="AI正在分析竞争力...")
-        def task():
-            def log(msg):
-                self.root.after(0, lambda: self._lb_status.configure(text=msg))
-            result = simulate_leaderboard(chapters, name, genre, wc, log_callback=log)
-            self._last_lb_result = result
-            report = generate_leaderboard_report(result)
-            def show():
-                self._lb_result.delete("1.0", "end")
-                self._lb_result.insert("1.0", report)
-                score = result.get("reader_votes", {}).get("total_score", 0)
-                self._lb_status.configure(text=f"排行榜分析完成 ✓ 综合评分: {score}/10", text_color=GREEN)
-            self.root.after(0, show)
-        import threading
-        threading.Thread(target=task, daemon=True).start()
-
-    def _export_lb_report(self):
-        if not self._last_lb_result:
-            self._lb_status.configure(text="请先执行「模拟排行榜」")
-            return
-        path = filedialog.asksaveasfilename(defaultextension=".md", filetypes=[("Markdown", "*.md")])
-        if path:
-            report = generate_leaderboard_report(self._last_lb_result)
-            write_file(path, report)
-            self._lb_status.configure(text=f"报告已导出: {path}", text_color=GREEN)
-
-    # ══════════════════════════════════════
-    # 页面: AI配音预览
-    # ══════════════════════════════════════
-    def _build_voice(self):
-        p = self.pages["voice"]
-        self._sect(p, "AI配音脚本预览")
-        scroll = ctk.CTkScrollableFrame(p, fg_color=BG)
-        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 12))
-
-        ctk.CTkLabel(scroll, text="章节内容（粘贴到下方）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
-        self._voice_text = ctk.CTkTextbox(scroll, height=180, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
-        self._voice_text.pack(fill="x", pady=(0, 8))
-
-        # Settings
-        sf = ctk.CTkFrame(scroll, fg_color="transparent")
-        sf.pack(fill="x", pady=(4, 8))
-        ctk.CTkLabel(sf, text="旁白音色：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
-        self._voice_narrator = ctk.CTkComboBox(sf, values=["沉稳男声", "温和女声", "清亮男声", "磁性男声", "知性女声"],
-                                               font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, button_color=ACCENT,
-                                               width=120, state="readonly")
-        self._voice_narrator.set("沉稳男声")
-        self._voice_narrator.pack(side="left", padx=(4, 16))
-        ctk.CTkLabel(sf, text="章节号：", font=("Microsoft YaHei", 11), text_color=TEXT).pack(side="left")
-        self._voice_ch_num = ctk.CTkEntry(sf, width=50, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT)
-        self._voice_ch_num.insert(0, "1")
-        self._voice_ch_num.pack(side="left", padx=4)
-        ctk.CTkButton(sf, text="生成脚本", command=self._run_voice,
-                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=120).pack(side="right", padx=3)
-        self._voice_preview_btn = ctk.CTkButton(sf, text="预览前10行", command=self._preview_voice,
-                                                 fg_color=BLUE, width=100)
-        self._voice_preview_btn.pack(side="right", padx=3)
-
-        # Result
-        self._voice_result = ctk.CTkTextbox(scroll, height=350, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
-        self._voice_result.pack(fill="both", expand=True)
-        self._voice_status = ctk.CTkLabel(scroll, text="就绪", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
-        self._voice_status.pack(anchor="w", pady=(4, 8))
-
-        # Store last script
-        self._last_voice_script = None
-
-    def _run_voice(self):
-        text = self._voice_text.get("1.0", "end-1c").strip()
-        if not text:
-            self._voice_status.configure(text="请填写章节内容")
-            return
-        try:
-            ch_num = int(self._voice_ch_num.get())
-        except ValueError:
-            ch_num = 1
-        narrator = self._voice_narrator.get()
-        self._voice_status.configure(text="生成配音脚本中...")
-        def task():
-            script = generate_voice_script(text, ch_num, narrator_voice=narrator)
-            self._last_voice_script = script
-            output = export_voice_script_as_text(script)
-            def show():
-                self._voice_result.delete("1.0", "end")
-                self._voice_result.insert("1.0", output)
-                stats = script.get("stats", {})
-                self._voice_status.configure(
-                    text=f"配音脚本完成 ✓ {stats.get('total_lines', 0)}行, {stats.get('dialogue_count', 0)}句对话, 预估{stats.get('total_duration_estimate_minutes', 0)}分钟",
-                    text_color=GREEN)
-            self.root.after(0, show)
-        import threading
-        threading.Thread(target=task, daemon=True).start()
-
-    def _preview_voice(self):
-        if not self._last_voice_script:
-            self._voice_status.configure(text="请先生成配音脚本")
-            return
-        preview = preview_first_lines(self._last_voice_script, 15)
-        self._voice_result.delete("1.0", "end")
-        self._voice_result.insert("1.0", f"【配音预览（前15行）】\n{'='*40}\n{preview}")
-        self._voice_status.configure(text="预览模式", text_color=ACCENT)
-
-
     def _on_close(self):
         try:
             self.stop_flag.set()

@@ -14,7 +14,7 @@ a = Analysis(
         'gui', 'core', 'core.config', 'core.llm', 'core.utils',
         'novel', 'prompts', 'deslop', 'review', 'analyze',
         'batch', 'cover', 'export', 'planner', 'project', 'dashboard', 'context', 'splitter', 'quality', 'bridge',
-        'editor', 'reader_sim', 'reverse_engineer', 'voice_preview', 'leaderboard',
+        'editor', 'reader_sim', 'reverse_engineer',
         'customtkinter', 'PIL', 'PIL._tkinter_finder',
         'openai', 'requests', '_tkinter', 'tkinter', 'tkinter.ttk', 'tkinter.font', 'tkinter.filedialog', 'tkinter.messagebox', 'tkinter.constants',
     ],
