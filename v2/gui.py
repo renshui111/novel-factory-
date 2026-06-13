@@ -451,6 +451,14 @@ class NovelFactoryGUI:
         # State
         self._current_step = "step1"
         self._step_results = {}  # {step_key: text}
+        self._step_extra = {}  # {step_key: extra_requirements}
+        self._style_presets = {
+            "爽文流": "节奏快，每3章小爽点，打脸狠，升级明显",
+            "暗黑流": "基调阴暗残酷，角色灰色，丛林法则",
+            "轻松流": "轻松幽默，主角魅力型，搞笑日常",
+            "严谨流": "设定经得起推敲，力量体系精确，伏笔缜密",
+            "热血流": "兄弟情义，战斗燃，为守护而战",
+        }
         self._show_step_panel("step1")
 
     def _show_step_panel(self, step_key):
@@ -504,6 +512,46 @@ class NovelFactoryGUI:
         info.insert("1.0", summary_texts.get(step_key, ""))
         info.configure(state="disabled")
 
+        # ── Extra requirements input (steps 1-5) ──
+        if step_key in ["step1", "step2", "step3", "step4", "step5"]:
+            # Style presets
+            ctk.CTkLabel(self._step_panel, text="风格预设：",
+                         font=("Microsoft YaHei", 10), text_color=PH).pack(anchor="w", padx=15, pady=(10, 2))
+            pf = ctk.CTkFrame(self._step_panel, fg_color="transparent")
+            pf.pack(fill="x", padx=12, pady=(0, 4))
+            for i, (name, desc) in enumerate(self._style_presets.items()):
+                ctk.CTkButton(pf, text=name, width=50, height=22,
+                              font=("Microsoft YaHei", 9),
+                              fg_color=CARD_HOVER, text_color=TEXT_DIM,
+                              command=lambda n=name, d=desc: self._apply_style_preset(n, d)
+                              ).pack(side="left", padx=1)
+
+            # Extra requirements text area
+            ctk.CTkLabel(self._step_panel, text="额外要求（引导AI生成方向）：",
+                         font=("Microsoft YaHei", 10, "bold"), text_color=ACCENT_LIGHT).pack(anchor="w", padx=15, pady=(6, 2))
+            
+            placeholders = {
+                "step1": "例如：要有反转剧情、主角一开始是废柴、加入师门试炼、前3章必须出现金手指",
+                "step2": "例如：修真体系分9境、有魔族入侵背景、宗门分上中下三等、灵石是硬通货",
+                "step3": "例如：主角性格冷傲但重情义、需要一个逗比跟班、反派是伪君子类型、加入一个女性强者",
+                "step4": "例如：三大宗门互相制衡、有一个隐藏的幕后组织、正邪两道各有内斗",
+                "step5": "例如：主角和女二是青梅竹马、师门内部有叛徒、正邪两道暗中有交易",
+            }
+            ph = placeholders.get(step_key, "输入你的具体要求...")
+            
+            self._extra_req_text = ctk.CTkTextbox(self._step_panel, height=80,
+                                                   font=("Microsoft YaHei", 10),
+                                                   fg_color=CARD, text_color=TEXT, wrap="word")
+            self._extra_req_text.pack(fill="x", padx=12, pady=(0, 6))
+            # Restore saved extra requirements
+            saved_extra = self._step_extra.get(step_key, "")
+            if saved_extra:
+                self._extra_req_text.insert("1.0", saved_extra)
+            else:
+                self._extra_req_text.insert("1.0", ph)
+            self._extra_req_text.bind("<FocusIn>", lambda e: self._on_extra_focus_in(ph))
+            self._extra_req_text.bind("<FocusOut>", lambda e: self._on_extra_focus_out(ph))
+
         # Show existing result if any
         if step_key in self._step_results and self._step_results[step_key]:
             self._create_editor.delete("1.0", "end")
@@ -519,6 +567,33 @@ class NovelFactoryGUI:
     def _on_create_start(self):
         """AI 生成当前步骤"""
         self._ai_generate_step(self._current_step)
+
+    def _apply_style_preset(self, name, desc):
+        if hasattr(self, '_extra_req_text'):
+            current = self._extra_req_text.get("1.0", "end-1c").strip()
+            if current.startswith("例如：") or current.startswith("输入你的"):
+                current = ""
+            if current:
+                current = current + "；" + desc
+            else:
+                current = desc
+            self._extra_req_text.delete("1.0", "end")
+            self._extra_req_text.insert("1.0", current)
+            self._log(self._create_log, f"已套用风格预设: {name}")
+
+    def _on_extra_focus_in(self, placeholder):
+        if hasattr(self, '_extra_req_text'):
+            current = self._extra_req_text.get("1.0", "end-1c").strip()
+            if current == placeholder:
+                self._extra_req_text.delete("1.0", "end")
+                self._extra_req_text.configure(text_color=TEXT)
+
+    def _on_extra_focus_out(self, placeholder):
+        if hasattr(self, '_extra_req_text'):
+            current = self._extra_req_text.get("1.0", "end-1c").strip()
+            if not current:
+                self._extra_req_text.insert("1.0", placeholder)
+                self._extra_req_text.configure(text_color=PH)
 
     def _ai_generate_step(self, step_key):
         """为指定步骤调用 AI 生成"""
@@ -543,32 +618,46 @@ class NovelFactoryGUI:
 
         def task():
             try:
+                # Collect extra requirements
+                extra = ""
+                if hasattr(self, '_extra_req_text'):
+                    extra = self._extra_req_text.get("1.0", "end-1c").strip()
+                    # Remove placeholder text
+                    if extra.startswith("例如：") or extra.startswith("输入你的"):
+                        extra = ""
+                self._step_extra[step_key] = extra
+
                 if step_key == "step1":
                     book_dir = prepare_book_dir(topic)
                     self._book_dir = book_dir
                     result = generate_outline(topic, genre, num_ch, wc, book_dir,
-                                              log_callback=lambda m: self._log(self._create_log, m))
+                                              log_callback=lambda m: self._log(self._create_log, m),
+                                              extra_requirements=extra)
                 elif step_key == "step2":
                     outline = self._step_results.get("step1", "")
                     result = generate_world_building(outline, genre, self._book_dir,
-                                                     log_callback=lambda m: self._log(self._create_log, m))
+                                                     log_callback=lambda m: self._log(self._create_log, m),
+                                                     extra_requirements=extra)
                 elif step_key == "step3":
                     outline = self._step_results.get("step1", "")
                     world = self._step_results.get("step2", "")
                     result = generate_characters(outline, world, genre, self._book_dir,
-                                                 log_callback=lambda m: self._log(self._create_log, m))
+                                                 log_callback=lambda m: self._log(self._create_log, m),
+                                                 extra_requirements=extra)
                 elif step_key == "step4":
                     outline = self._step_results.get("step1", "")
                     world = self._step_results.get("step2", "")
                     chars = self._step_results.get("step3", "")
                     result = generate_organizations(outline, world, chars, genre, self._book_dir,
-                                                    log_callback=lambda m: self._log(self._create_log, m))
+                                                    log_callback=lambda m: self._log(self._create_log, m),
+                                                    extra_requirements=extra)
                 elif step_key == "step5":
                     outline = self._step_results.get("step1", "")
                     chars = self._step_results.get("step3", "")
                     orgs = self._step_results.get("step4", "")
                     result = generate_relationships(outline, chars, orgs, genre, self._book_dir,
-                                                    log_callback=lambda m: self._log(self._create_log, m))
+                                                    log_callback=lambda m: self._log(self._create_log, m),
+                                                    extra_requirements=extra)
                 elif step_key == "step6":
                     outline = self._step_results.get("step1", "")
                     world = self._step_results.get("step2", "")

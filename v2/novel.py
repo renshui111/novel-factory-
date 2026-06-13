@@ -903,12 +903,13 @@ def continue_novel(book_dir: str, additional_chapters: int = 10,
 
 def generate_outline(topic: str, genre: str, num_chapters: int,
                      words_per_chapter: int, book_dir: str,
-                     log_callback=None) -> str:
+                     log_callback=None, extra_requirements: str = "") -> str:
     """Step 1: 生成大纲"""
     from prompts import OUTLINE_GENERATION
+    extra = extra_requirements if extra_requirements.strip() else "无特殊要求，按网文最佳实践自由发挥"
     prompt = OUTLINE_GENERATION.format(
         topic=topic, genre=genre, num_chapters=num_chapters,
-        words_per_chapter=words_per_chapter)
+        words_per_chapter=words_per_chapter, extra_requirements=extra)
     if log_callback:
         log_callback("正在生成大纲...")
     result = llm_invoke_ada(prompt,
@@ -920,10 +921,11 @@ def generate_outline(topic: str, genre: str, num_chapters: int,
 
 
 def generate_world_building(outline: str, genre: str, book_dir: str,
-                            log_callback=None) -> str:
+                            log_callback=None, extra_requirements: str = "") -> str:
     """Step 2: 生成世界观设定"""
     from prompts import WORLD_BUILDING_PROMPT
-    prompt = WORLD_BUILDING_PROMPT.format(outline=outline[:6000], genre=genre)
+    extra = extra_requirements if extra_requirements.strip() else "无特殊要求，按网文最佳实践自由发挥"
+    prompt = WORLD_BUILDING_PROMPT.format(outline=outline[:6000], genre=genre, extra_requirements=extra)
     if log_callback:
         log_callback("正在生成世界观设定...")
     result = llm_invoke_ada(prompt,
@@ -935,11 +937,12 @@ def generate_world_building(outline: str, genre: str, book_dir: str,
 
 
 def generate_characters(outline: str, world_setting: str, genre: str,
-                        book_dir: str, log_callback=None) -> str:
+                        book_dir: str, log_callback=None, extra_requirements: str = "") -> str:
     """Step 3: 生成人物设定"""
     from prompts import CHARACTER_GENERATION
+    extra = extra_requirements if extra_requirements.strip() else "无特殊要求，按网文最佳实践自由发挥"
     prompt = CHARACTER_GENERATION.format(
-        outline=outline[:4000], world_setting=world_setting[:3000], genre=genre)
+        outline=outline[:4000], world_setting=world_setting[:3000], genre=genre, extra_requirements=extra)
     if log_callback:
         log_callback("正在生成人物设定...")
     result = llm_invoke_ada(prompt,
@@ -952,12 +955,13 @@ def generate_characters(outline: str, world_setting: str, genre: str,
 
 def generate_organizations(outline: str, world_setting: str,
                            characters: str, genre: str, book_dir: str,
-                           log_callback=None) -> str:
+                           log_callback=None, extra_requirements: str = "") -> str:
     """Step 4: 生成组织/势力设定"""
     from prompts import ORGANIZATION_GENERATION
+    extra = extra_requirements if extra_requirements.strip() else "无特殊要求，按网文最佳实践自由发挥"
     prompt = ORGANIZATION_GENERATION.format(
         outline=outline[:3000], world_setting=world_setting[:2500],
-        characters=characters[:2500], genre=genre)
+        characters=characters[:2500], genre=genre, extra_requirements=extra)
     if log_callback:
         log_callback("正在生成组织设定...")
     result = llm_invoke_ada(prompt,
@@ -970,12 +974,13 @@ def generate_organizations(outline: str, world_setting: str,
 
 def generate_relationships(outline: str, characters: str,
                            organizations: str, genre: str, book_dir: str,
-                           log_callback=None) -> str:
+                           log_callback=None, extra_requirements: str = "") -> str:
     """Step 5: 生成人物关系+组织关系"""
     from prompts import RELATIONSHIP_GENERATION
+    extra = extra_requirements if extra_requirements.strip() else "无特殊要求，按网文最佳实践自由发挥"
     prompt = RELATIONSHIP_GENERATION.format(
         outline=outline[:3000], characters=characters[:3000],
-        organizations=organizations[:2000], genre=genre)
+        organizations=organizations[:2000], genre=genre, extra_requirements=extra)
     if log_callback:
         log_callback("正在生成关系网络...")
     result = llm_invoke_ada(prompt,
