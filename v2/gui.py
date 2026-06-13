@@ -20,7 +20,9 @@ from core import (
 )
 from novel import (
     generate_novel, generate_setting, generate_directory,
-    generate_chapter, update_summary, prepare_book_dir
+    generate_chapter, update_summary, prepare_book_dir,
+    generate_outline, generate_world_building, generate_characters,
+    generate_organizations, generate_relationships, continue_novel
 )
 from analyze import analyze_novel, batch_analyze
 from deslop import deslop_file, generate_ai_word_report
@@ -341,9 +343,12 @@ class NovelFactoryGUI:
     # ══════════════════════════════════════
     # 页面: Create (step-by-step)
     # ══════════════════════════════════════
+        # ══════════════════════════════════════
+    # 页面: 写书 — 手动分步流程
+    # ══════════════════════════════════════
     def _build_create(self):
         p = self.pages["create"]
-        self._sect(p, "写书 - 分步生成")
+        self._sect(p, "写书 — 手动分步")
 
         cfg = load_config()["novel"]
         top = ctk.CTkFrame(p, fg_color=CARD)
@@ -370,1161 +375,402 @@ class NovelFactoryGUI:
         self._wc_var = ctk.StringVar(value=str(cfg.get("words_per_chapter", 3000)))
         ctk.CTkEntry(gf, textvariable=self._wc_var, width=70).grid(row=0, column=7, padx=2)
 
-        # ── Mode selector ──
-        mode_frame = ctk.CTkFrame(p, fg_color=CARD)
-        mode_frame.pack(fill="x", padx=20, pady=3)
-        mf = ctk.CTkFrame(mode_frame, fg_color="transparent")
-        mf.pack(pady=6)
-        self._create_mode.trace_add("write", lambda *_: self._on_create_mode_change())
-        self._mode_selector = ctk.CTkSegmentedButton(
-            mf,
-            values=["全自动", "半自动", "手动"],
-            variable=self._create_mode,
-            font=("Microsoft YaHei", 12),
-            selected_color=ACCENT,
-            unselected_color=CARD_HOVER,
-            unselected_hover_color="#3a3a5e",
-        )
-        self._mode_selector.pack()
-        self._mode_selector.set("全自动")
-        # Map user-facing labels to internal values
-        self._mode_map = {"全自动": "auto", "半自动": "semi", "手动": "manual"}
-        self._mode_rev = {"auto": "全自动", "semi": "半自动", "manual": "手动"}
-        # CTkSegmentedButton stores display text; sync via callback
-
-        # Step indicator
+        # ── Step indicator (7 steps) ──
         self.step_frame = ctk.CTkFrame(p, fg_color=CARD)
         self.step_frame.pack(fill="x", padx=20, pady=3)
         sf = ctk.CTkFrame(self.step_frame, fg_color="transparent")
         sf.pack(pady=8)
         self._step_labels = {}
-        steps = [
-            ("step1", "1. 生成设定"),
-            ("step2", "2. 生成目录"),
-            ("step3", "3. 生成正文"),
-            ("step4", "4. 收尾"),
-        ]
-        for i, (key, label) in enumerate(steps):
-            step_frame = ctk.CTkFrame(sf, fg_color=CARD_HOVER, corner_radius=6)
-            step_frame.pack(side="left", padx=4)
-            lbl = ctk.CTkLabel(step_frame, text=label, font=("Microsoft YaHei", 12), text_color=PH)
-            lbl.pack(padx=12, pady=6)
+        self._step_keys = ["step1", "step2", "step3", "step4", "step5", "step6", "step7"]
+        self._step_names = {
+            "step1": "大纲", "step2": "世界观", "step3": "人物设定",
+            "step4": "组织设定", "step5": "关系图谱", "step6": "章节目录", "step7": "写正文"
+        }
+        self._step_colors = {
+            "step1": ACCENT, "step2": "#7c4dff", "step3": BLUE,
+            "step4": "#00bcd4", "step5": "#4caf50", "step6": ORANGE, "step7": RED
+        }
+        for i, key in enumerate(self._step_keys):
+            name = self._step_names[key]
+            c = self._step_colors[key]
+            sf2 = ctk.CTkFrame(sf, fg_color=CARD_HOVER, corner_radius=6)
+            sf2.pack(side="left", padx=2)
+            lbl = ctk.CTkLabel(sf2, text=f"{i+1}. {name}", font=("Microsoft YaHei", 10), text_color=PH)
+            lbl.pack(padx=6, pady=4)
             self._step_labels[key] = lbl
-            if i < len(steps) - 1:
-                ctk.CTkLabel(sf, text="→", font=("Microsoft YaHei", 16), text_color=BORDER).pack(side="left", padx=2)
+            if i < 6:
+                ctk.CTkLabel(sf, text="→", font=("Microsoft YaHei", 12), text_color=BORDER).pack(side="left", padx=1)
 
-        # Content area: left panel + dashboard + right log
+        # ── Main area ──
         mid = ctk.CTkFrame(p, fg_color=BG)
         mid.pack(fill="both", expand=True, padx=20, pady=3)
 
+        # Left: step panel
         self._step_panel = ctk.CTkFrame(mid, fg_color=CARD, width=360, corner_radius=10)
         self._step_panel.pack(side="left", fill="y", padx=(0, 5))
         self._step_panel.pack_propagate(False)
 
-        # Dashboard panel (fixed width, between step panel and log)
-        dash_frame = ctk.CTkFrame(mid, fg_color=CARD, width=200)
-        dash_frame.pack(side="left", fill="y", padx=(0, 5))
-        dash_frame.pack_propagate(False)
-        ctk.CTkLabel(dash_frame, text="仪表盘",
-                     font=("Microsoft YaHei", 12, "bold"),
-                     text_color=GREEN).pack(anchor="w", padx=8, pady=5)
-        self._dash_labels = {}
-        dash_items = [
-            ("progress", "进度", "0 / 0 章"),
-            ("words", "已写字数", "0 字"),
-            ("speed", "生成速度", "—"),
-            ("eta", "预计剩余", "—"),
-            ("tokens", "Token 消耗", "—"),
-            ("foreshadow", "未回收伏笔", "0"),
-        ]
-        for key, label, default in dash_items:
-            f = ctk.CTkFrame(dash_frame, fg_color="transparent")
-            f.pack(fill="x", padx=8, pady=2)
-            ctk.CTkLabel(f, text=label, font=("Microsoft YaHei", 10),
-                         text_color=PH).pack(anchor="w")
-            val = ctk.CTkLabel(f, text=default,
-                               font=("Microsoft YaHei", 13, "bold"),
-                               text_color=TEXT, anchor="w", justify="left")
-            val.pack(anchor="w", fill="x")
-            self._dash_labels[key] = val
+        # Right: editor + log
+        right = ctk.CTkFrame(mid, fg_color=BG)
+        right.pack(side="right", fill="both", expand=True)
 
-        log_frame = ctk.CTkFrame(mid, fg_color=BG)
-        log_frame.pack(side="right", fill="both", expand=True)
-        ctk.CTkLabel(log_frame, text="日志",
-                     font=("Microsoft YaHei", 12, "bold"),
-                     text_color=BLUE).pack(anchor="w")
-        self._create_log = ctk.CTkTextbox(log_frame, fg_color="#10121c",
-                                           text_color=TEXT, font=("Consolas", 11))
-        self._create_log.pack(fill="both", expand=True)
+        # Editable text area
+        ctk.CTkLabel(right, text="编辑区（可手动修改）", font=("Microsoft YaHei", 12, "bold"), text_color=ACCENT).pack(anchor="w")
+        self._create_editor = ctk.CTkTextbox(right, fg_color=CARD, text_color=TEXT,
+                                              font=("Microsoft YaHei", 11), wrap="word")
+        self._create_editor.pack(fill="both", expand=True, pady=(4, 4))
 
-        self._progress_bar = ctk.CTkProgressBar(p, height=6, fg_color="#333",
-                                                  progress_color=ACCENT)
-        self._progress_bar.pack(fill="x", padx=20, pady=(0, 3))
-        self._progress_bar.set(0)
+        # Log
+        self._create_log = ctk.CTkTextbox(right, fg_color="#10121c", text_color=TEXT,
+                                           font=("Consolas", 10), height=100)
+        self._create_log.pack(fill="x", pady=(2, 0))
+        self._log(self._create_log, "就绪 — 按步骤从「大纲」开始")
 
+        # ── Bottom buttons ──
         btn_frame = ctk.CTkFrame(p, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=5)
 
-        # 实时进度面板（写书页底部）
-        self._create_progress = ctk.CTkTextbox(p, fg_color="#10121c",
-                                                 text_color=GREEN, font=("Consolas", 11),
-                                                 height=150)
-        self._create_progress.pack(fill="x", padx=20, pady=(0, 3))
-        self._create_progress.insert("end", "━━━ 生成进度 ━━━\n")
-        self._create_progress.insert("end", "━━━ 日志 ━━━\n")
-        self._create_progress.configure(state="disabled")
-
-        self._step_btn = ctk.CTkButton(btn_frame, text="全自动生成",
+        self._step_btn = ctk.CTkButton(btn_frame, text="AI 生成",
                                         command=self._on_create_start,
                                         fg_color=ACCENT,
                                         font=("Microsoft YaHei", 14, "bold"),
-                                        height=38)
+                                        height=38, width=120)
         self._step_btn.pack(side="left", padx=3)
+        ctk.CTkButton(btn_frame, text="确认 → 下一步",
+                      command=self._on_confirm_step,
+                      fg_color=GREEN, font=("Microsoft YaHei", 13),
+                      height=38, width=140).pack(side="left", padx=3)
         self._stop_btn = ctk.CTkButton(btn_frame, text="停止",
                                         command=self._stop,
                                         fg_color="#555", state="disabled")
         self._stop_btn.pack(side="left", padx=3)
-        self._pause_btn = ctk.CTkButton(btn_frame, text="暂停",
-                                        command=self._toggle_pause,
-                                        fg_color=ORANGE, state="disabled")
-        self._pause_btn.pack(side="left", padx=3)
         ctk.CTkButton(btn_frame, text="打开目录",
                       command=lambda: self._open_dir(self._book_dir),
                       fg_color=BLUE).pack(side="right", padx=3)
 
+        # State
+        self._current_step = "step1"
+        self._step_results = {}  # {step_key: text}
         self._show_step_panel("step1")
 
     def _show_step_panel(self, step_key):
         for w in self._step_panel.winfo_children():
             w.destroy()
 
-        colors = {"step1": ACCENT, "step2": BLUE, "step3": GREEN, "step4": ORANGE}
-        c = colors.get(step_key, ACCENT)
+        self._current_step = step_key
+        c = self._step_colors.get(step_key, ACCENT)
         for k, lbl in self._step_labels.items():
-            lbl.configure(text_color=c if k == step_key else PH)
+            if k in self._step_results and self._step_results[k]:
+                lbl.configure(text_color=GREEN)
+            elif k == step_key:
+                lbl.configure(text_color=c)
+            else:
+                lbl.configure(text_color=PH)
 
-        if step_key == "step1":
-            self._build_panel_1()
-        elif step_key == "step2":
-            self._build_panel_2()
-        elif step_key == "step3":
-            self._build_panel_3()
-        elif step_key == "step4":
-            self._build_panel_4()
+        name = self._step_names[step_key]
+        step_num = self._step_keys.index(step_key) + 1
 
-    def _build_panel_1(self):
-        ctk.CTkLabel(self._step_panel, text="步骤1: 生成设定",
-                     font=("Microsoft YaHei", 15, "bold"),
-                     text_color=ACCENT).pack(anchor="w", padx=15, pady=(12, 5))
-        ctk.CTkLabel(self._step_panel,
-                     text="Generate complete world-building, characters,\npower system, and story outline.",
-                     font=("Microsoft YaHei", 11), text_color=PH,
-                     wraplength=330).pack(anchor="w", padx=15, pady=3)
+        header = ctk.CTkLabel(self._step_panel, text=f"步骤{step_num}: {name}",
+                              font=("Microsoft YaHei", 15, "bold"), text_color=c)
+        header.pack(anchor="w", padx=15, pady=(12, 5))
 
-        info = ctk.CTkTextbox(self._step_panel, height=140, fg_color="#10121c",
-                               text_color=TEXT, font=("Microsoft YaHei", 10))
-        info.pack(fill="x", padx=15, pady=5)
-        info.insert("end", "Tips:\n")
-        info.insert("end", "- Be specific with your topic\n")
-        info.insert("end", "- Setting can be edited after generation\n")
-        info.insert("end", "- Click below or use 'Full Auto' for all steps")
+        descriptions = {
+            "step1": "输入主题后点击「AI 生成」，AI 将生成完整的小说大纲，\n包括分卷结构、每章概要、高潮节点、爽点分布。\n生成后可在右侧编辑区修改。",
+            "step2": "根据大纲生成世界观设定：时代背景、力量体系、\n势力分布、地理格局、特殊规则、货币资源。",
+            "step3": "生成人物设定：主角、重要配角、反派的详细信息，\n包括性格、背景、能力、动机、成长弧线。",
+            "step4": "生成组织/势力体系：宗门、国家、佣兵团等，\n各组织的等级、资源、历史恩怨。",
+            "step5": "生成关系图谱：人物之间的关系网、组织间的关系、\n情感线设计。基于前4步的设定自动整合。",
+            "step6": "生成章节目录：根据所有设定生成完整的章节目录，\n每章含标题和概要。确认后进入正文生成。",
+            "step7": "开始逐章生成正文。每章根据设定自动写作，\n保证文风一致、人物不跑偏、剧情连贯。",
+        }
+        desc = descriptions.get(step_key, "")
+        ctk.CTkLabel(self._step_panel, text=desc, font=("Microsoft YaHei", 11),
+                     text_color=PH, wraplength=330, justify="left").pack(anchor="w", padx=15, pady=3)
+
+        # Info area
+        info = ctk.CTkTextbox(self._step_panel, height=120, fg_color="#10121c",
+                               text_color=TEXT, font=("Microsoft YaHei", 10), state="disabled")
+        info.pack(fill="x", padx=12, pady=5)
+        summary_texts = {
+            "step1": "大纲会保存在「大纲.md」\n后续步骤依赖大纲内容",
+            "step2": "世界观保存在「世界观.md」\n核心设定，影响全局",
+            "step3": "人物保存在「人物设定.md」\n至少10个角色的详细档案",
+            "step4": "组织保存在「组织设定.md」\n势力的权力结构和利益关系",
+            "step5": "关系保存在「关系图谱.md」\n谁和谁是什么关系",
+            "step6": "目录保存在「目录.md」\n每章标题+概要",
+            "step7": "正文逐章保存在「正文/」目录\n每章独立一个 .md 文件",
+        }
+        info.configure(state="normal")
+        info.insert("1.0", summary_texts.get(step_key, ""))
         info.configure(state="disabled")
 
-        self._step1_btn = ctk.CTkButton(self._step_panel, text="生成设定",
-                                          command=self._run_step1,
-                                          fg_color=ACCENT, height=35)
-        self._step1_btn.pack(pady=8, padx=15)
+        # Show existing result if any
+        if step_key in self._step_results and self._step_results[step_key]:
+            self._create_editor.delete("1.0", "end")
+            self._create_editor.insert("1.0", self._step_results[step_key])
+            ctk.CTkButton(self._step_panel, text="重新生成",
+                          command=lambda: self._ai_generate_step(step_key),
+                          fg_color=ORANGE, width=100).pack(pady=8, padx=15)
+        else:
+            if step_key != "step1":
+                self._create_editor.delete("1.0", "end")
 
-    def _build_panel_2(self):
-        ctk.CTkLabel(self._step_panel, text="步骤2: 生成目录",
-                     font=("Microsoft YaHei", 15, "bold"),
-                     text_color=BLUE).pack(anchor="w", padx=15, pady=(12, 5))
-        ctk.CTkLabel(self._step_panel,
-                     text="Generate chapter titles and positioning.\nEach chapter ends with a hook.",
-                     font=("Microsoft YaHei", 11), text_color=PH,
-                     wraplength=330).pack(anchor="w", padx=15, pady=3)
+    # ─── Step generation ───
+    def _on_create_start(self):
+        """AI 生成当前步骤"""
+        self._ai_generate_step(self._current_step)
 
-        # 自定义大纲导入
-        self._use_custom_outline = ctk.BooleanVar(value=False)
-        self._outline_cb = ctk.CTkCheckBox(
-            self._step_panel, text="导入自定义大纲",
-            variable=self._use_custom_outline,
-            command=self._toggle_outline_mode,
-            font=("Microsoft YaHei", 11), text_color=TEXT)
-        self._outline_cb.pack(anchor="w", padx=15, pady=(5, 0))
-
-        # 大纲文件选择框（初始隐藏）
-        self._custom_outline_path = ctk.StringVar()
-        self._outline_file_frame = ctk.CTkFrame(self._step_panel, fg_color=CARD)
-        self._outline_file_frame.pack_forget()
-        outline_row = ctk.CTkFrame(self._outline_file_frame, fg_color="transparent")
-        outline_row.pack(fill="x", padx=10, pady=5)
-        ctk.CTkEntry(outline_row, textvariable=self._custom_outline_path,
-                     placeholder_text="选择 .txt / .md 大纲文件...",
-                     font=("Microsoft YaHei", 10)).pack(side="left", fill="x", expand=True, padx=(0, 4))
-        ctk.CTkButton(outline_row, text="浏览", command=self._browse_outline,
-                      width=48, height=24).pack(side="right")
-
-        # 格式提示
-        self._outline_hint = ctk.CTkLabel(
-            self._step_panel, text="",
-            font=("Microsoft YaHei", 9), text_color=ORANGE)
-        self._outline_hint.pack(anchor="w", padx=15, pady=(0, 2))
-
-        self._dir_preview = ctk.CTkTextbox(self._step_panel, height=180,
-                                            fg_color="#10121c",
-                                            text_color=TEXT,
-                                            font=("Consolas", 10))
-        self._dir_preview.pack(fill="both", expand=True, padx=15, pady=5)
-        self._dir_preview.insert("end", "（请先生成设定）")
-
-        self._step2_btn = ctk.CTkButton(self._step_panel, text="生成目录",
-                                          command=self._run_step2,
-                                          fg_color=BLUE, height=35)
-        self._step2_btn.pack(pady=8, padx=15)
-
-    def _build_panel_3(self):
-        ctk.CTkLabel(self._step_panel, text="步骤3: 生成正文",
-                     font=("Microsoft YaHei", 15, "bold"),
-                     text_color=GREEN).pack(anchor="w", padx=15, pady=(12, 5))
-
-        # 进度概览
-        self._ch_progress = ctk.CTkLabel(self._step_panel, text="0 / 0 章",
-                                          font=("Microsoft YaHei", 20, "bold"),
-                                          text_color=GREEN)
-        self._ch_progress.pack(pady=2)
-
-        self._ch_eta = ctk.CTkLabel(self._step_panel, text="",
-                                     font=("Microsoft YaHei", 11), text_color=PH)
-        self._ch_eta.pack()
-
-        self._ch_bar = ctk.CTkProgressBar(self._step_panel, height=8,
-                                            fg_color="#333",
-                                            progress_color=GREEN)
-        self._ch_bar.pack(fill="x", padx=15, pady=3)
-        self._ch_bar.set(0)
-
-        # 当前状态（现在在干嘛）
-        self._ch_status = ctk.CTkLabel(self._step_panel, text="就绪，点击下方开始生成",
-                                        font=("Microsoft YaHei", 11), text_color=PH,
-                                        wraplength=330)
-        self._ch_status.pack(pady=2)
-
-        # 实时内容预览（滚动展示当前正在生成的内容）
-        preview_frame = ctk.CTkFrame(self._step_panel, fg_color="#10121c", corner_radius=4)
-        preview_frame.pack(fill="both", expand=True, padx=15, pady=3)
-        self._ch_preview = ctk.CTkTextbox(preview_frame, fg_color="#10121c",
-                                            text_color=TEXT, font=("Consolas", 10),
-                                            wrap="word")
-        self._ch_preview.pack(fill="both", expand=True)
-        self._ch_preview.insert("end", "（生成过程中，这里会实时显示正文内容）")
-
-        self._step3_btn = ctk.CTkButton(self._step_panel, text="开始生成",
-                                          command=self._run_step3,
-                                          fg_color=GREEN, height=35)
-        self._step3_btn.pack(pady=6, padx=15)
-
-    def _build_panel_4(self):
-        ctk.CTkLabel(self._step_panel, text="步骤4: 收尾",
-                     font=("Microsoft YaHei", 15, "bold"),
-                     text_color=ORANGE).pack(anchor="w", padx=15, pady=(12, 5))
-        ctk.CTkLabel(self._step_panel,
-                     text="对全书去AI味与质量检查。",
-                     font=("Microsoft YaHei", 11), text_color=PH,
-                     wraplength=330).pack(anchor="w", padx=15, pady=3)
-
-        self._final_info = ctk.CTkTextbox(self._step_panel, height=200,
-                                           fg_color="#10121c",
-                                           text_color=TEXT,
-                                           font=("Consolas", 10))
-        self._final_info.pack(fill="both", expand=True, padx=15, pady=5)
-
-        bf = ctk.CTkFrame(self._step_panel, fg_color="transparent")
-        bf.pack(pady=8)
-        ctk.CTkButton(bf, text="全部去AI味", command=self._run_step4_deslop,
-                      fg_color=ORANGE, width=120).pack(side="left", padx=3)
-        ctk.CTkButton(bf, text="打开目录",
-                      command=lambda: self._open_dir(self._book_dir),
-                      fg_color=BLUE, width=120).pack(side="left", padx=3)
-        ctk.CTkButton(bf, text="续写10章",
-                      command=self._run_continue,
-                      fg_color="#9c27b0", width=100).pack(side="left", padx=3)
-
-    # ─── Step execution ─────────────
-    def _get_novel_config(self):
+    def _ai_generate_step(self, step_key):
+        """为指定步骤调用 AI 生成"""
+        topic = self._topic_var.get().strip()
+        genre = self._genre_var.get()
         try:
-            nc = int(self._ch_var.get())
+            num_ch = int(self._ch_var.get())
+        except ValueError:
+            num_ch = 30
+        try:
             wc = int(self._wc_var.get())
         except ValueError:
-            self._log(self._create_log, "错误: 章节数和字数必须是数字")
-            return None
-        return {
-            "topic": self._topic_var.get(),
-            "genre": self._genre_var.get(),
-            "num_chapters": nc,
-            "words_per_chapter": wc,
-        }
+            wc = 3000
 
-    def _run_step1(self):
-        cfg = self._get_novel_config()
-        if not cfg or not cfg["topic"]:
-            self._log(self._create_log, "错误: 请填写主题")
+        if step_key == "step1" and not topic:
+            self._log(self._create_log, "请先填写主题")
             return
-        self._save_novel_cfg(cfg)
-        self._step1_btn.configure(state="disabled", text="生成中...")
+
+        self._step_btn.configure(state="disabled", text="生成中...")
+        self._stop_btn.configure(state="normal")
+        self._log(self._create_log, f"正在 AI 生成: {self._step_names[step_key]}...")
 
         def task():
             try:
-                self._book_dir = prepare_book_dir(cfg["topic"])
-                self._setting_text = generate_setting(
-                    cfg["topic"], cfg["genre"], cfg["num_chapters"],
-                    self._book_dir,
-                    log_callback=lambda m: self._log(self._create_log, m))
-                self.root.after(0, lambda: self._show_step_panel("step2"))
-                self.root.after(0, lambda: self._dir_preview.delete("0.0", "end"))
-            finally:
-                self.root.after(0, lambda: self._step1_btn.configure(
-                    state="normal", text="重新生成"))
-
-        threading.Thread(target=task, daemon=True).start()
-
-    def _run_step2(self):
-        if not self._setting_text:
-            self._log(self._create_log, "错误: 请先生成设定(步骤1)")
-            return
-
-        # 自定义大纲模式
-        if self._use_custom_outline.get():
-            path = self._custom_outline_path.get()
-            if not path or not os.path.exists(path):
-                self._log(self._create_log, "错误: 请选择有效的大纲文件")
-                return
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    raw = f.read()
-                self._chapters_list = self._parse_outline(raw)
-                if not self._chapters_list:
-                    self._log(self._create_log, "错误: 无法解析大纲，请确认格式为 第001章: 标题 ─ 描述")
+                if step_key == "step1":
+                    book_dir = prepare_book_dir(topic)
+                    self._book_dir = book_dir
+                    result = generate_outline(topic, genre, num_ch, wc, book_dir,
+                                              log_callback=lambda m: self._log(self._create_log, m))
+                elif step_key == "step2":
+                    outline = self._step_results.get("step1", "")
+                    result = generate_world_building(outline, genre, self._book_dir,
+                                                     log_callback=lambda m: self._log(self._create_log, m))
+                elif step_key == "step3":
+                    outline = self._step_results.get("step1", "")
+                    world = self._step_results.get("step2", "")
+                    result = generate_characters(outline, world, genre, self._book_dir,
+                                                 log_callback=lambda m: self._log(self._create_log, m))
+                elif step_key == "step4":
+                    outline = self._step_results.get("step1", "")
+                    world = self._step_results.get("step2", "")
+                    chars = self._step_results.get("step3", "")
+                    result = generate_organizations(outline, world, chars, genre, self._book_dir,
+                                                    log_callback=lambda m: self._log(self._create_log, m))
+                elif step_key == "step5":
+                    outline = self._step_results.get("step1", "")
+                    chars = self._step_results.get("step3", "")
+                    orgs = self._step_results.get("step4", "")
+                    result = generate_relationships(outline, chars, orgs, genre, self._book_dir,
+                                                    log_callback=lambda m: self._log(self._create_log, m))
+                elif step_key == "step6":
+                    outline = self._step_results.get("step1", "")
+                    world = self._step_results.get("step2", "")
+                    chars = self._step_results.get("step3", "")
+                    orgs = self._step_results.get("step4", "")
+                    rels = self._step_results.get("step5", "")
+                    combined = f"{outline[:2000]}\n\n{world[:1500]}\n\n{chars[:1500]}\n\n{orgs[:1000]}\n\n{rels[:1000]}"
+                    result = generate_directory(combined, num_ch, self._book_dir,
+                                                log_callback=lambda m: self._log(self._create_log, m))
+                    # Parse chapters
+                    self._chapters_list = _parse_directory(result, num_ch) if callable(eval("_parse_directory")) else []
+                elif step_key == "step7":
+                    self.root.after(0, lambda: self._start_chapter_generation())
+                    self.root.after(0, lambda: self._step_btn.configure(state="normal", text="AI 生成"))
                     return
-                # 写入目录.md
-                md_lines = "\n".join([
-                    f"第{c['num']:03d}章: {c['title']} ─ {c['desc']}"
-                    for c in self._chapters_list
-                ])
-                write_file(os.path.join(self._book_dir, "目录.md"), md_lines)
-                preview = "\n".join([
-                    f"Ch.{c['num']:03d}: {c['title']}"
-                    for c in self._chapters_list[:20]
-                ])
-                if len(self._chapters_list) > 20:
-                    preview += f"\n... ({len(self._chapters_list)} total)"
-                self.root.after(0, lambda: (
-                    self._dir_preview.delete("0.0", "end"),
-                    self._dir_preview.insert("end", preview),
-                    self._show_step_panel("step3"),
-                    self._ch_progress.configure(
-                        text=f"0 / {len(self._chapters_list)} chapters"),
-                    self._ch_bar.set(0)))
-                self._log(self._create_log, f"已导入 {len(self._chapters_list)} 章大纲")
+
+                self._step_results[step_key] = result
+                self.root.after(0, lambda: self._show_result(step_key, result))
             except Exception as e:
-                self._log(self._create_log, f"导入大纲失败: {e}")
-            return
-
-        cfg = self._get_novel_config()
-        self._step2_btn.configure(state="disabled", text="生成中...")
-
-        def task():
-            try:
-                self._chapters_list = generate_directory(
-                    self._setting_text, cfg["num_chapters"],
-                    self._book_dir,
-                    log_callback=lambda m: self._log(self._create_log, m))
-                preview = "\n".join([
-                    f"Ch.{c['num']:03d}: {c['title']}"
-                    for c in self._chapters_list[:20]
-                ])
-                if len(self._chapters_list) > 20:
-                    preview += f"\n... ({len(self._chapters_list)} total)"
-                self.root.after(0, lambda: (
-                    self._dir_preview.delete("0.0", "end"),
-                    self._dir_preview.insert("end", preview),
-                    self._show_step_panel("step3"),
-                    self._ch_progress.configure(
-                        text=f"0 / {len(self._chapters_list)} chapters"),
-                    self._ch_bar.set(0)))
-            finally:
-                self.root.after(0, lambda: self._step2_btn.configure(
-                    state="normal", text="重新生成"))
-
-        threading.Thread(target=task, daemon=True).start()
-
-    def _parse_outline(self, raw: str) -> list:
-        """解析自定义大纲文本，格式: 第001章: 标题 ─ 描述"""
-        import re
-        chapters = []
-        for line in raw.strip().split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            # 第001章: 标题 ─ 描述
-            m = re.match(r'第(\d+)章[：:]\s*(.+?)(?:[─\-—]\s*(.+))?$', line)
-            if m:
-                chapters.append({
-                    "num": int(m.group(1)),
-                    "title": m.group(2).strip(),
-                    "desc": m.group(3).strip() if m.group(3) else ""
-                })
-                continue
-            # 数字开头: 1. 标题 ─ 描述
-            m2 = re.match(r'(\d+)[.、．\s]+(.+)', line)
-            if m2:
-                rest = m2.group(2).strip()
-                parts = re.split(r'[─\-—]', rest, 1)
-                chapters.append({
-                    "num": int(m2.group(1)),
-                    "title": parts[0].strip(),
-                    "desc": parts[1].strip() if len(parts) > 1 else ""
-                })
-        chapters.sort(key=lambda x: x['num'])
-        return chapters
-
-    def _run_step3(self):
-        if not self._chapters_list:
-            self._log(self._create_log, "错误: 请先生成目录(步骤2)")
-            return
-        cfg = self._get_novel_config()
-        self.stop_flag.clear()
-        self.pause_flag.clear()
-        self._step3_btn.configure(state="disabled", text="生成中...")
-        self._stop_btn.configure(state="normal")
-        self._pause_btn.configure(state="normal", text="暂停")
-        self._init_progress(cfg)
-
-        def task():
-            import time as _time
-            try:
-                total = len(self._chapters_list)
-                self.progress["total_chapters"] = total
-                summary = f"{cfg['topic']} ({cfg['genre']}, {total}章)\n"
-                total_wc = 0
-                done = 0
-                dir_text = "\n".join([
-                    f"Ch.{c['num']:03d}: {c['title']}"
-                    for c in self._chapters_list
-                ])
-                chapter_times = []
-
-                for i, ch in enumerate(self._chapters_list, 1):
-                    if self.stop_flag.is_set():
-                        self._log(self._create_log, f"已停止 ({done}/{total}章)")
-                        break
-
-                    # 暂停检测：如果暂停则循环等待，直到继续或停止
-                    while self.pause_flag.is_set() and not self.stop_flag.is_set():
-                        self.root.after(0, lambda n=ch['num'], t=total: (
-                            self._ch_status.configure(
-                                text=f"已暂停 (第 {n}/{t} 章)"),
-                            self._ch_preview.delete("0.0", "end"),
-                            self._ch_preview.insert("end", "（生成已暂停）")
-                        ))
-                        _time.sleep(0.5)
-                    if self.stop_flag.is_set():
-                        break
-
-                    t_start = _time.time()
-                    self._log(self._create_log, f"[{ch['num']}/{total}] {ch['title']}")
-                    self._log_progress(f"→ 正在生成 第{ch['num']}/{total}章「{ch['title']}」")
-
-                    # 更新状态：显示当前在做什么
-                    self.root.after(0, lambda n=ch['num'], t=total: (
-                        self._ch_status.configure(
-                            text=f"正在请求 LLM 生成第 {n}/{t} 章..."),
-                        self._ch_preview.delete("0.0", "end"),
-                        self._ch_preview.insert("end", "（等待 LLM 响应...）")
-                    ))
-
-                    summary_file = os.path.join(self._book_dir, "全局摘要.txt")
-                    from core import read_file
-                    cur = read_file(summary_file) or summary
-
-                    # 流式生成：实时更新预览
-                    def make_stream_cb():
-                        preview_chars = []
-                        def cb(chunk):
-                            preview_chars.append(chunk)
-                            preview_text = "".join(preview_chars)
-                            # 预览区只显示最近 2000 字符
-                            display = preview_text[-2000:] if len(preview_text) > 2000 else preview_text
-                            self.root.after(0, lambda d=display: (
-                                self._ch_preview.delete("0.0", "end"),
-                                self._ch_preview.insert("end", d),
-                                self._ch_preview.see("end")
-                            ))
-                        return cb
-
-                    result = generate_chapter(
-                        ch["num"], ch["title"],
-                        self._setting_text, dir_text, cur,
-                        cfg["words_per_chapter"],
-                        self._book_dir,
-                        log_callback=lambda m: self._log(self._create_log, m),
-                        stream_callback=make_stream_cb(),
-                        stop_flag=self.stop_flag
-                    )
-                    if not result["success"]:
-                        self._log_progress(f"✗ 第{ch['num']}章生成失败")
-                        continue
-
-                    t_elapsed = _time.time() - t_start
-                    chapter_times.append(t_elapsed)
-
-                    self._log_progress(f"✓ 第{ch['num']}章完成（{result['words']:,}字, 耗时{t_elapsed:.0f}s）")
-
-                    # 更新状态：摘要更新中
-                    self.root.after(0, lambda: self._ch_status.configure(
-                        text=f"正在更新全局摘要..."))
-
-                    done += 1
-                    total_wc += result["words"]
-                    update_summary(ch["num"], ch["title"],
-                                   result["content"], cur, self._book_dir)
-
-                    # 计算 ETA
-                    avg_time = sum(chapter_times) / len(chapter_times) if chapter_times else 0
-                    remaining = total - done
-                    eta_seconds = int(avg_time * remaining)
-                    eta_str = f"{eta_seconds//60}分{eta_seconds%60}秒" if eta_seconds > 60 else f"{eta_seconds}秒"
-
-                    pct = done / total
-                    self.root.after(0, lambda p=pct, d=done, w=total_wc, eta=eta_str: (
-                        self._ch_bar.set(p),
-                        self._ch_progress.configure(
-                            text=f"{d} / {total} 章  |  已写 {w:,} 字"),
-                        self._ch_status.configure(
-                            text=f"本章耗时 {t_elapsed:.0f}秒 | 预计剩余 {eta}")
-                    ))
-
-                # 完成
-                self.root.after(0, lambda: (
-                    self._show_step_panel("step4"),
-                    self._final_info.delete("0.0", "end"),
-                    self._final_info.insert("end",
-                        f"完成: {done}/{total} 章\n\n"
-                        f"总字数: {total_wc:,}\n"
-                        f"输出目录: {self._book_dir}\n\n"
-                        f"下一步:\n"
-                        f"1. 点击下方「全部去AI味」处理全书\n"
-                        f"2. 打开目录查看章节\n"
-                        f"3. 手动编辑修改正文")
-                ))
-            finally:
-                self.root.after(0, lambda: self._step3_btn.configure(
-                    state="normal", text="继续生成"))
+                self.root.after(0, lambda: self._log(self._create_log, f"生成失败: {e}"))
+                self.root.after(0, lambda: self._step_btn.configure(state="normal", text="AI 生成"))
                 self.root.after(0, lambda: self._stop_btn.configure(state="disabled"))
-                self.root.after(0, lambda: self._pause_btn.configure(state="disabled", text="暂停"))
 
-        threading.Thread(target=task, daemon=True).start()
-
-    def _run_step4_deslop(self):
-        if not self._book_dir or not os.path.exists(self._book_dir):
-            self._log(self._create_log, "错误: 未找到小说目录")
-            return
-        ch_dir = os.path.join(self._book_dir, "正文")
-        if not os.path.exists(ch_dir):
-            self._log(self._create_log, "未找到正文目录")
-            return
-
-        files = sorted([f for f in os.listdir(ch_dir) if f.endswith(".md")])
-        if not files:
-            self._log(self._create_log, "未找到章节")
-            return
-
-        self._log(self._create_log, "正在对全书去AI味...")
-        def task():
-            for fname in files:
-                path = os.path.join(ch_dir, fname)
-                r = deslop_file(path, use_llm=False,
-                                log_callback=lambda m: self._log(self._create_log, m))
-                if "error" not in r:
-                    self._log(self._create_log,
-                              f"  {fname}: {r.get('rule_replacements', 0)} replacements")
-            self._log(self._create_log, "Done! All chapters de-AI'd")
-
-        threading.Thread(target=task, daemon=True).start()
-
-    # ─── 多模式调度 ────────────────────────
-    def _on_create_mode_change(self):
-        """Called when create mode changes. Updates the main button text."""
-        mode = self._create_mode.get()  # e.g. "全自动", "半自动", "手动"
-        btn_texts = {
-            "全自动": "全自动生成",
-            "半自动": "半自动生成",
-            "手动": "手动辅助",
-        }
-        if hasattr(self, '_step_btn'):
-            self._step_btn.configure(text=btn_texts.get(mode, "全自动生成"))
-
-    def _on_create_start(self):
-        """Dispatcher: start generation based on current mode."""
-        mode_label = self._create_mode.get()
-        mode = self._mode_map.get(mode_label, "auto")
-        if mode == "auto":
-            self._run_full_auto()
-        elif mode == "semi":
-            self._run_semi_auto()
-        else:
-            self._run_manual()
-
-    # ─── 半自动模式 ────────────────────────
-    def _run_semi_auto(self):
-        """半自动：每步生成后暂停，用户确认/编辑后再继续下一步。"""
-        cfg = self._get_novel_config()
-        if not cfg or not cfg["topic"]:
-            self._log(self._create_log, "错误: 请填写主题")
-            return
-        self._save_novel_cfg(cfg)
-        self.stop_flag.clear()
-        self._step_btn.configure(state="disabled", text="半自动中...")
-        self._stop_btn.configure(state="normal")
-        self._pause_btn.configure(state="disabled", text="暂停")
-        self._init_progress(cfg)
-
-        def task():
-            import time as _time
-            from novel import generate_setting, generate_directory, prepare_book_dir
-            try:
-                # Step 1: 生成设定 → 弹出确认
-                self.root.after(0, lambda: self._show_step_panel("step1"))
-                self._log(self._create_log, "[半自动] 设定生成中...")
-                setting = generate_setting(
-                    config={"novel": cfg},
-                    log_callback=lambda m: self._log(self._create_log, m),
-                    stop_flag=self.stop_flag)
-                if self.stop_flag.is_set() or "error" in setting:
-                    return
-                confirmed = self._show_confirm_dialog(
-                    "步骤1: 生成设定",
-                    f"设定已生成\n\n{setting.get('setting', '')}",
-                    edit_enabled=True)
-                if not confirmed or self.stop_flag.is_set():
-                    self._log(self._create_log, "[半自动] 用户取消")
-                    return
-
-                # Step 2: 生成目录 → 弹出确认
-                self.root.after(0, lambda: self._show_step_panel("step2"))
-                self._log(self._create_log, "[半自动] 目录生成中...")
-                directory = generate_directory(
-                    config={"novel": cfg},
-                    setting_text=setting.get("setting", ""),
-                    log_callback=lambda m: self._log(self._create_log, m),
-                    stop_flag=self.stop_flag)
-                if self.stop_flag.is_set() or "error" in directory:
-                    return
-                confirmed = self._show_confirm_dialog(
-                    "步骤2: 生成目录",
-                    f"目录已生成\n\n{directory.get('directory', '')}",
-                    edit_enabled=True)
-                if not confirmed or self.stop_flag.is_set():
-                    self._log(self._create_log, "[半自动] 用户取消")
-                    return
-
-                # Step 3+4: 准备书籍目录 → 逐章生成 → 收尾
-                self.root.after(0, lambda: self._show_step_panel("step3"))
-                book_dir = prepare_book_dir(cfg["topic"])
-                self._book_dir = book_dir
-                chapters = self._parse_dir_text(directory.get("directory", ""))
-                if not chapters:
-                    self._log(self._create_log, "错误: 未解析到有效目录")
-                    return
-                cfg["num_chapters"] = len(chapters)
-                cfg["chapters"] = chapters
-
-                from novel import generate_chapter, update_summary
-                total_chapters = len(chapters)
-                for idx, ch in enumerate(chapters):
-                    if self.stop_flag.is_set():
-                        break
-                    ch_num = ch["num"]
-                    ch_title = ch["title"]
-                    self.root.after(0, lambda n=ch_num, t=ch_title:
-                        self._log(self._create_log, f"准备生成第{n}章: {t}"))
-
-                    # Semi-auto: confirm each chapter
-                    confirmed = self._show_confirm_dialog(
-                        f"第{ch_num}章: {ch_title}",
-                        f"准备生成第{ch_num}章「{ch_title}」\n字数目标: {cfg['words_per_chapter']:,}字",
-                        edit_enabled=False, confirm_text="开始生成")
-                    if not confirmed or self.stop_flag.is_set():
-                        self._log(self._create_log, f"[半自动] 跳过第{ch_num}章")
-                        continue
-
-                    self._log(self._create_log, f"[半自动] 第{ch_num}章生成中...")
-                    content = generate_chapter(
-                        novel_config=cfg,
-                        chapter_index=idx,
-                        chapter=ch,
-                        book_dir=book_dir,
-                        all_chapters=chapters,
-                        log_callback=lambda m: self._log(self._create_log, m),
-                        stop_flag=self.stop_flag)
-                    if self.stop_flag.is_set() or "error" in content:
-                        self._log(self._create_log, f"[半自动] 第{ch_num}章生成失败")
-                        continue
-
-                    update_summary(book_dir, ch_title, content.get("chapter_text", ""))
-
-                # Step 4: 收尾
-                self.root.after(0, lambda: self._show_step_panel("step4"))
-                self._log(self._create_log, "[半自动] 全书生成完成")
-                self.root.after(0, lambda: self._final_info.delete("0.0", "end"))
-                self.root.after(0, lambda: self._final_info.insert("end",
-                    f"半自动完成\n\nChapters: {total_chapters}\n"
-                    f"Output: {book_dir}"))
-
-            finally:
-                self.root.after(0, lambda: self._step_btn.configure(
-                    state="normal", text="半自动生成"))
-                self.root.after(0, lambda: self._stop_btn.configure(state="disabled"))
-                self.root.after(0, lambda: self._pause_btn.configure(state="disabled", text="暂停"))
-
-        threading.Thread(target=task, daemon=True).start()
-
-    # ─── 手动模式 (简化版) ──────────────────
-    def _run_manual(self):
-        """手动模式：用户自己准备设定和目录，工具只负责写正文。"""
-        cfg = self._get_novel_config()
-        if not cfg or not cfg["topic"]:
-            self._log(self._create_log, "错误: 请填写主题")
-            return
-        self._save_novel_cfg(cfg)
-        from novel import prepare_book_dir, generate_chapter, save_checkpoint, load_checkpoint, update_character_archive
-        from core import read_file, write_file
-        from export import export_to_txt, export_to_epub
-
-        # 用户选择设定文件
-        import tkinter.filedialog as fd
-        set_path = fd.askopenfilename(title="选择设定文件",
-            filetypes=[("Markdown", "*.md"), ("Text", "*.txt"), ("All", "*.*")])
-        if not set_path:
-            self._log(self._create_log, "已取消")
-            return
-        novel_setting = read_file(set_path)
-        if not novel_setting:
-            self._log(self._create_log, "设定文件为空")
-            return
-        self._log(self._create_log, f"已加载设定: {set_path}")
-
-        # 用户选择目录文件
-        dir_path = fd.askopenfilename(title="选择大纲/目录文件",
-            filetypes=[("Markdown", "*.md"), ("Text", "*.txt"), ("All", "*.*")])
-        if not dir_path:
-            self._log(self._create_log, "已取消")
-            return
-        dir_text = read_file(dir_path)
-        if not dir_text:
-            self._log(self._create_log, "目录文件为空")
-            return
-        self._log(self._create_log, f"已加载目录: {dir_path}")
-
-        # 解析目录
-        chapters = self._parse_outline(dir_text)
-        if not chapters:
-            self._log(self._create_log, "无法解析目录，请确认格式为 第001章: 标题")
-            return
-
-        # 创建书本目录
-        self.stop_flag.clear()
-        self._step_btn.configure(state="disabled", text="手动生成中...")
-        self._stop_btn.configure(state="normal")
-        self._pause_btn.configure(state="disabled")
-        book_dir = prepare_book_dir(cfg["topic"])
-        write_file(os.path.join(book_dir, "设定.md"), novel_setting)
-        write_file(os.path.join(book_dir, "目录.md"), dir_text)
-        from novel import init_character_archive
-        init_character_archive(book_dir, novel_setting)
-        self._init_progress({**cfg, "num_chapters": len(chapters)})
-        self.root.after(0, lambda: self._show_step_panel("step3"))
-
-        def task():
-            try:
-                summary = f"{cfg['topic']}（{cfg.get('genre','')}，共{len(chapters)}章）\n"
-                for ch in chapters:
-                    if self.stop_flag and self.stop_flag.is_set():
-                        break
-                    ch_result = generate_chapter(
-                        ch['num'], ch['title'],
-                        novel_setting, dir_text, summary,
-                        cfg.get('words_per_chapter', 2000),
-                        book_dir, lambda m: self._log(self._create_log, m),
-                        None, self.stop_flag)
-                    if ch_result.get('success'):
-                        save_checkpoint(book_dir, ch['num'], summary)
-                self._log(self._create_log, f"手动模式完成，输出: {book_dir}")
-            finally:
-                self.root.after(0, lambda: (self._step_btn.configure(state="normal", text="手动辅助"),
-                    self._stop_btn.configure(state="disabled"),
-                    self._pause_btn.configure(state="disabled")))
-        threading.Thread(target=task, daemon=True).start()
-
-    # ─── 确认对话框（半自动） ──────────────
-    def _show_confirm_dialog(self, title: str, message: str,
-                              edit_enabled: bool = False,
-                              confirm_text: str = "确认继续") -> bool:
-        """显示确认弹窗，阻塞直到用户确认或取消。返回 True=确认, False=取消。"""
-        import queue
-        result_queue = queue.Queue()
-
-        def show():
-            dlg = ctk.CTkToplevel(self.root)
-            dlg.title(title)
-            dlg.geometry("600x450")
-            dlg.transient(self.root)
-            dlg.grab_set()
-            dlg.configure(fg_color=BG)
-
-            lbl = ctk.CTkLabel(dlg, text=title,
-                               font=("Microsoft YaHei", 15, "bold"),
-                               text_color=ACCENT)
-            lbl.pack(anchor="w", padx=15, pady=(12, 5))
-
-            if edit_enabled:
-                txt = ctk.CTkTextbox(dlg, fg_color="#10121c",
-                                     text_color=TEXT, font=("Consolas", 11))
-                txt.pack(fill="both", expand=True, padx=15, pady=5)
-                txt.insert("1.0", message)
-            else:
-                txt = ctk.CTkTextbox(dlg, fg_color="#10121c",
-                                     text_color=TEXT, font=("Consolas", 11))
-                txt.pack(fill="both", expand=True, padx=15, pady=5)
-                txt.insert("1.0", message)
-                txt.configure(state="disabled")
-
-            bf = ctk.CTkFrame(dlg, fg_color="transparent")
-            bf.pack(pady=8)
-
-            def on_confirm():
-                dlg.destroy()
-                result_queue.put(True)
-
-            def on_cancel():
-                dlg.destroy()
-                result_queue.put(False)
-
-            ctk.CTkButton(bf, text=confirm_text,
-                          command=on_confirm,
-                          fg_color=GREEN).pack(side="left", padx=4)
-            ctk.CTkButton(bf, text="取消",
-                          command=on_cancel,
-                          fg_color="#666").pack(side="left", padx=4)
-
-        self.root.after(0, show)
-        return result_queue.get()
-
-    def _show_edit_dialog(self, title: str, prompt: str, initial: str) -> str | None:
-        """显示可编辑文本对话框。返回编辑后的内容，取消返回 None。"""
-        import queue
-        result_queue = queue.Queue()
-
-        def show():
-            dlg = ctk.CTkToplevel(self.root)
-            dlg.title(title)
-            dlg.geometry("700x500")
-            dlg.transient(self.root)
-            dlg.grab_set()
-            dlg.configure(fg_color=BG)
-
-            ctk.CTkLabel(dlg, text=prompt,
-                         font=("Microsoft YaHei", 12),
-                         text_color=TEXT).pack(anchor="w", padx=15, pady=(12, 3))
-
-            txt = ctk.CTkTextbox(dlg, fg_color="#10121c",
-                                 text_color=TEXT, font=("Consolas", 11))
-            txt.pack(fill="both", expand=True, padx=15, pady=5)
-            txt.insert("1.0", initial)
-
-            bf = ctk.CTkFrame(dlg, fg_color="transparent")
-            bf.pack(pady=8)
-
-            def on_ok():
-                result = txt.get("1.0", "end-1c")
-                dlg.destroy()
-                result_queue.put(result)
-
-            def on_cancel():
-                dlg.destroy()
-                result_queue.put(None)
-
-            ctk.CTkButton(bf, text="确认",
-                          command=on_ok,
-                          fg_color=GREEN).pack(side="left", padx=4)
-            ctk.CTkButton(bf, text="取消",
-                          command=on_cancel,
-                          fg_color="#666").pack(side="left", padx=4)
-
-        self.root.after(0, show)
-        return result_queue.get()
-
-    def _run_full_auto(self):
-        cfg = self._get_novel_config()
-        if not cfg or not cfg["topic"]:
-            self._log(self._create_log, "错误: 请填写主题")
-            return
-        self._save_novel_cfg(cfg)
-        self.stop_flag.clear()
-        self.pause_flag.clear()
-        self._step_btn.configure(state="disabled", text="全自动中...")
-        self._stop_btn.configure(state="normal")
-        self._pause_btn.configure(state="normal", text="暂停")
-        self._init_progress(cfg)
-
-        def task():
-            import time as _time
-            try:
-                result = generate_novel(
-                    config={"novel": cfg},
-                    log_callback=lambda m: self._log(self._create_log, m),
-                    stop_flag=self.stop_flag,
-                    progress_callback=self._on_novel_progress,
-                    custom_outline_path=self._custom_outline_path.get()
-                        if self._use_custom_outline.get() else None)
-                # 全自动模式：暂停检测在 progress_callback 中进行
-                while self.pause_flag.is_set() and not self.stop_flag.is_set():
-                    _time.sleep(0.5)
-                if "book_dir" in result:
-                    self._book_dir = result["book_dir"]
-                    self.root.after(0, lambda: (
-                        self._show_step_panel("step4"),
-                        self._final_info.delete("0.0", "end"),
-                        self._final_info.insert("end",
-                            f"{result.get('status', 'Done')}\n\n"
-                            f"Chapters: {result.get('chapters_done', 0)}/"
-                            f"{result.get('chapters_planned', 0)}\n"
-                            f"Words: {result.get('total_words', 0):,}\n"
-                            f"Time: {result.get('elapsed_seconds', 0):.0f}s\n"
-                            f"Output: {result.get('book_dir', '')}")))
-            finally:
-                mode_label = self._mode_rev.get(self._create_mode.get(), "全自动")
-                btn_texts = {"全自动": "全自动生成", "半自动": "半自动生成", "手动": "手动辅助"}
-                self.root.after(0, lambda: self._step_btn.configure(
-                    state="normal",
-                    text=btn_texts.get(mode_label, "全自动生成")))
-                self.root.after(0, lambda: self._stop_btn.configure(state="disabled"))
-                self.root.after(0, lambda: self._pause_btn.configure(state="disabled", text="暂停"))
-
-        threading.Thread(target=task, daemon=True).start()
-
-    def _parse_dir_text(self, dir_text: str) -> list:
-        import re
-        chapters = []
-        for line in dir_text.strip().split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            m = re.match(r'第(\d+)章[\uff1a:]\s*(.+?)(?:[\u2500\u2014\u2015\-]\s*(.+))?$', line)
-            if m:
-                chapters.append({
-                    "num": int(m.group(1)),
-                    "title": m.group(2).strip(),
-                    "desc": m.group(3).strip() if m.group(3) else ""
-                })
-        return chapters
-
-    def _save_novel_cfg(self, cfg):
-        c = load_config()
-        c["novel"] = cfg
-        save_config()
-
-    def _toggle_outline_mode(self):
-        if self._use_custom_outline.get():
-            self._outline_file_frame.pack(fill="x", padx=10, pady=3)
-            self._outline_hint.configure(
-                text="格式: 第001章: 标题 ─ 一句话描述")
-            self._step2_btn.configure(text="导入大纲", fg_color=GREEN)
-        else:
-            self._outline_file_frame.pack_forget()
-            self._outline_hint.configure(text="")
-            self._step2_btn.configure(text="生成目录", fg_color=BLUE)
-
-    def _browse_outline(self):
-        f = filedialog.askopenfilename(
-            title="选择大纲文件",
-            filetypes=[("Markdown", "*.md"), ("Text", "*.txt"), ("All", "*.*")])
-        if f:
-            self._custom_outline_path.set(f)
-            # Preview the outline
-            try:
-                with open(f, 'r', encoding='utf-8') as fp:
-                    preview = fp.read()[:500]
-                self._dir_preview.delete("0.0", "end")
-                self._dir_preview.insert("end", preview)
-                ch_count = len(re.findall(r'第\d+章', preview))
-                self._outline_hint.configure(
-                    text=f"已识别 {ch_count} 章 | {f}")
-            except Exception as e:
-                self._outline_hint.configure(text=f"读取失败: {e}")
-
-    def _run_continue(self):
-        """在已有小说后续写额外章节"""
-        if not self._book_dir or not os.path.exists(self._book_dir):
-            self._log(self._create_log, "错误: 请先生成小说")
-            return
-        
-        from novel import continue_novel
-        
-        def task():
-            try:
-                self._log(self._create_log, "开始续写...")
-                result = continue_novel(
-                    book_dir=self._book_dir,
-                    additional_chapters=10,
-                    log_callback=lambda m: self._log(self._create_log, m),
-                    stop_flag=self.stop_flag,
-                    progress_callback=self._on_novel_progress)
-                self._log(self._create_log,
-                    f"续写完成: +{result.get('chapters_added', 0)}章")
-                self.root.after(0, lambda: self._final_info.insert("end",
-                    f"\n续写完成: +{result.get('chapters_added', 0)}章"))
-            except Exception as e:
-                self._log(self._create_log, f"续写失败: {e}")
-        
         import threading
         threading.Thread(target=task, daemon=True).start()
 
-    
+    def _show_result(self, step_key, result):
+        self._create_editor.delete("1.0", "end")
+        self._create_editor.insert("1.0", result)
+        self._step_btn.configure(state="normal", text="AI 生成")
+        self._stop_btn.configure(state="disabled")
+        self._log(self._create_log, f"{self._step_names[step_key]} 完成 ✓ — 可在右侧编辑区修改，确认后点「确认→下一步」")
+        self._show_step_panel(step_key)
+
+    def _on_confirm_step(self):
+        """确认当前步骤，保存编辑内容，进入下一步"""
+        current = self._current_step
+        # Save edited content
+        edited = self._create_editor.get("1.0", "end-1c").strip()
+        if edited:
+            self._step_results[current] = edited
+            # Also save to file
+            file_map = {
+                "step1": "大纲.md", "step2": "世界观.md", "step3": "人物设定.md",
+                "step4": "组织设定.md", "step5": "关系图谱.md", "step6": "目录.md",
+            }
+            if current in file_map and self._book_dir:
+                write_file(os.path.join(self._book_dir, file_map[current]), edited)
+
+        # Go to next step
+        idx = self._step_keys.index(current)
+        if idx < 6:
+            next_step = self._step_keys[idx + 1]
+            self._show_step_panel(next_step)
+            self._log(self._create_log, f"→ 进入: {self._step_names[next_step]}")
+        else:
+            self._log(self._create_log, "所有设定步骤完成！点击「AI 生成」开始逐章写正文")
+            self._show_step_panel("step7")
+
+    def _start_chapter_generation(self):
+        """Step 7: 开始逐章生成正文"""
+        topic = self._topic_var.get().strip()
+        genre = self._genre_var.get()
+        try:
+            num_ch = int(self._ch_var.get())
+        except ValueError:
+            num_ch = 30
+        try:
+            wc = int(self._wc_var.get())
+        except ValueError:
+            wc = 3000
+
+        if not self._book_dir:
+            self._log(self._create_log, "错误: 未创建书籍目录")
+            return
+
+        self._save_novel_cfg()
+        self._log(self._create_log, "开始逐章生成正文...")
+        self._step_btn.configure(state="disabled")
+
+        def task():
+            chapters = self._chapters_list if hasattr(self, '_chapters_list') and self._chapters_list else []
+            result = generate_novel(
+                topic, genre, num_ch, wc, self._book_dir,
+                log_callback=lambda m: self._log(self._create_log, m),
+                stop_flag=self.stop_flag)
+            self.root.after(0, lambda: self._on_novel_done(result))
+
+        import threading
+        threading.Thread(target=task, daemon=True).start()
+
+    def _on_novel_done(self, result):
+        self._step_btn.configure(state="normal", text="AI 生成")
+        status = result.get("status", "完成")
+        words = result.get("total_words", 0)
+        self._log(self._create_log, f"写书{status} | 共{words:,}字 | 目录: {self._book_dir}")
+
+    def _get_novel_config(self):
+        try:
+            num_ch = int(self._ch_var.get())
+        except ValueError:
+            num_ch = 30
+        try:
+            wc = int(self._wc_var.get())
+        except ValueError:
+            wc = 3000
+        return {
+            "topic": self._topic_var.get().strip(),
+            "genre": self._genre_var.get(),
+            "num_chapters": num_ch,
+            "words_per_chapter": wc,
+        }
+
+    def _save_novel_cfg(self):
+        from core import load_config, save_config
+        cfg = load_config()
+        cfg["novel"] = self._get_novel_config()
+        save_config()
+
     def _toggle_pause(self):
         if self.pause_flag.is_set():
             self.pause_flag.clear()
             self._pause_btn.configure(text="暂停")
-            self._log(self._create_log, "继续生成...")
-            self._log_progress("→ 继续生成")
         else:
             self.pause_flag.set()
             self._pause_btn.configure(text="继续")
-            self._log(self._create_log, "已暂停")
-            self._log_progress("⏸ 已暂停")
 
     def _stop(self):
-        if not messagebox.askyesno("确认", "确定要停止生成吗？\n已完成的章节不会丢失。"):
-            return
         self.stop_flag.set()
-        self.pause_flag.clear()  # 同时解除暂停状态
-        self._pause_btn.configure(text="暂停")
-        self.progress["status"] = "cancelled"
-        self._log_progress("✗ 用户已停止生成")
-        self._log(self._create_log, "停止中...")
+        self._stop_btn.configure(state="disabled")
+        self._step_btn.configure(state="normal", text="AI 生成")
+        self._log(self._create_log, "已停止")
 
-    def _init_progress(self, cfg):
-        """初始化进度面板"""
-        self.progress["status"] = "running"
+    def _init_progress(self, total_chapters):
+        self.progress["total_chapters"] = total_chapters
         self.progress["current_chapter"] = 0
-        self.progress["total_chapters"] = cfg.get("num_chapters", 30)
-        self.progress["current_step"] = "初始化"
-        self.progress["chapter_title"] = ""
         self.progress["chapter_words"] = 0
         self.progress["elapsed_seconds"] = 0
-        self.progress["errors"] = []
-        # 清空并重置进度面板
-        def reset():
-            self._create_progress.configure(state="normal")
-            self._create_progress.delete("0.0", "end")
-            self._create_progress.insert("end", "━━━ 生成进度 ━━━\n")
-            self._create_progress.insert("end", "━━━ 日志 ━━━\n")
-            self._create_progress.configure(state="disabled")
-        self.root.after(0, reset)
+        self.progress["status"] = "running"
+        # self._progress_bar.set(0)
 
     def _update_dashboard(self):
-        """更新写书仪表盘小组件"""
-        try:
-            p = self.progress
-            done = p.get("current_chapter", 0)
-            total = p.get("total_chapters", 0)
-            words = p.get("chapter_words", 0)
-            # 累计已写字数（从数组估算）
-            total_words = done * p.get("words_per_chapter", 3000) if done > 0 else 0
-            elapsed = p.get("elapsed_seconds", 0)
-            speed = (total_words / (elapsed / 60)) if elapsed > 5 else 0
-            remain = p.get("estimated_remaining", "−")
-
-            def do_update():
-                d = self._dash_labels
-                d["progress"].configure(text=f"{done} / {total} 章")
-                d["words"].configure(text=f"{total_words:,} 字")
-                if speed:
-                    d["speed"].configure(text=f"{speed:.0f} 字/分")
-                if remain:
-                    d["eta"].configure(text=remain)
-                # Token 估算（粗略）
-                est_tokens = total_words * 1.5
-                d["tokens"].configure(text=f"~{int(est_tokens):,}")
-            self.root.after(0, do_update)
-        except Exception:
-            pass
+        p = self.progress
+        cur = p.get("current_chapter", 0)
+        total = p.get("total_chapters", 0)
+        w = p.get("chapter_words", 0)
+        elapsed = p.get("elapsed_seconds", 0)
+        if cur > 0 and elapsed > 0:
+            speed = round(w * cur / elapsed)
+            eta_sec = (total - cur) * (elapsed / cur) if cur > 0 else 0
+            eta = f"{int(eta_sec // 60)}分{int(eta_sec % 60)}秒" if eta_sec > 0 else "—"
+        else:
+            speed = "—"
+            eta = "—"
+        # self._dash_labels["progress"].configure(text=f"{cur} / {total} 章")
+        # self._dash_labels["words"].configure(text=f"{w * cur:,} 字")
+        # self._dash_labels["speed"].configure(text=f"{speed}" if isinstance(speed, str) else f"{speed} 字/秒")
+        # self._dash_labels["eta"].configure(text=eta)
+        # if cur > 0 and total > 0:\n        #     self._progress_bar.set(cur / total)
 
     def _log_progress(self, msg):
-        """向进度面板追加日志（线程安全）"""
-        def do_log():
-            self._create_progress.configure(state="normal")
-            ts = datetime.now().strftime("%H:%M:%S")
-            self._create_progress.insert("end", f"[{ts}] {msg}\n")
-            self._create_progress.see("end")
-            self._create_progress.configure(state="disabled")
-        self.root.after(0, do_log)
+        self._create_log.configure(state="normal")
+        self._create_log.insert("end", msg + "\n")
+        self._create_log.see("end")
+        self._create_log.configure(state="disabled")
 
-    def _on_novel_progress(self, action, data):
-        """generate_novel 的进度回调（线程安全）"""
-        def update():
-            self._create_progress.configure(state="normal")
-            if action == "step_start":
-                step = data.get("step", "")
-                total = data.get("total", 0)
-                desc = data.get("desc", "")
-                self.progress["current_step"] = step
-                self.progress["total_chapters"] = total
-                self._create_progress.delete("0.0", "end")
-                self._create_progress.insert("end", f"━━━ 生成进度 ━━━\n")
-                self._create_progress.insert("end", f"→ 正在{step}...\n")
-                if total:
-                    self._create_progress.insert("end", f"  共 {total} 章\n")
-                self._create_progress.insert("end", f"━━━ 日志 ━━━\n")
-            elif action == "step_done":
-                result = data.get("result", "")
-                self._create_progress.delete("0.0", "end")
-                self._create_progress.insert("end", f"━━━ 生成进度 ━━━\n")
-                self._create_progress.insert("end", f"✓ {data.get('step', '')} 完成\n")
-                if result:
-                    self._create_progress.insert("end", f"  {result}\n")
-                self._create_progress.insert("end", f"━━━ 日志 ━━━\n")
-            elif action == "chapter_start":
-                num = data.get("chapter_num", 0)
-                title = data.get("title", "")
-                total = data.get("total", 0)
-                self.progress["current_chapter"] = num
-                self.progress["chapter_title"] = title
-                self._create_progress.delete("0.0", "end")
-                self._create_progress.insert("end", f"━━━ 生成进度 ━━━\n")
-                self._create_progress.insert("end", f"→ 正在生成 第{num}/{total}章「{title}」\n")
-                self._create_progress.insert("end", f"━━━ 日志 ━━━\n")
-            elif action == "chapter_done":
-                num = data.get("chapter_num", 0)
-                words = data.get("words", 0)
-                total = self.progress.get("total_chapters", 0)
-                title = data.get("title", "")
-                self.progress["chapter_words"] = words
-                self.progress["elapsed_seconds"] = data.get("elapsed", 0)
-                self.progress["total_words"] = data.get("total_words", words)
-                self._update_dashboard()
-                self._create_progress.delete("0.0", "end")
-                self._create_progress.insert("end", f"━━━ 生成进度 ━━━\n")
-                self._create_progress.insert("end", f"✓ 第{num}章「{title}」完成\n")
-                self._create_progress.insert("end", f"  字数: {words:,} | 已完成 {num}/{total}章\n")
-                self._create_progress.insert("end", f"━━━ 日志 ━━━\n")
-            self._create_progress.see("end")
-            self._create_progress.configure(state="disabled")
-        self.root.after(0, update)
+    def _on_novel_progress(self, data):
+        self.progress.update(data)
+        self.root.after(0, self._update_dashboard)
 
-    # ══════════════════════════════════════
-    # 页面: Batch
-    # ══════════════════════════════════════
+    def _browse_outline(self):
+        f = filedialog.askopenfilename(filetypes=[("Markdown", "*.md"), ("Text", "*.txt")])
+        if f:
+            text = read_file(f)
+            if text:
+                self._create_editor.delete("1.0", "end")
+                self._create_editor.insert("1.0", text)
+                self._log(self._create_log, f"已加载: {f}")
+
+    def _run_continue(self):
+        d = self._book_dir
+        if not d or not os.path.isdir(d):
+            self._log(self._create_log, "请先生成至少一次")
+            return
+        self._log(self._create_log, "开始续写...")
+        self._step_btn.configure(state="disabled")
+        def task():
+            try:
+                result = continue_novel(d, additional_chapters=10,
+                                        log_callback=lambda m: self._log(self._create_log, m),
+                                        stop_flag=self.stop_flag)
+                self.root.after(0, lambda: self._log(self._create_log, f"续写完成: {result.get('chapters_added', 0)}章"))
+            except Exception as e:
+                self.root.after(0, lambda: self._log(self._create_log, f"续写失败: {e}"))
+            self.root.after(0, lambda: self._step_btn.configure(state="normal", text="AI 生成"))
+        import threading
+        threading.Thread(target=task, daemon=True).start()
+
+    def _toggle_outline_mode(self):
+        pass  # 已整合到手动流程中
+
+
     def _build_batch(self):
         p = self.pages["batch"]
         self._sect(p, "批量写书")
