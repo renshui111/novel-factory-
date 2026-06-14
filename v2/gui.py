@@ -36,33 +36,32 @@ from reader_sim import simulate_reader, simulate_all_readers, predict_abandonmen
 from downloader import download_novel, detect_platform, PLATFORMS
 from reverse_engineer import reverse_engineer, apply_formula_to_new_book
 
-# ── shadcn/ui inspired dark design system ──
-BG = "#09090b"          # 页面背景 - 极深
-SB = "#0d0d12"          # 侧栏背景
-CARD = "#13131a"        # 卡片背景
-CARD_HOVER = "#1a1a24"  # 卡片悬停
-BORDER = "#1e1e2a"      # 边框/分割线
-ACCENT = "#3b82f6"      # 主色调 - 清爽蓝
-ACCENT_HOVER = "#2563eb" # 主色悬停
-ACCENT_LIGHT = "#93c5fd" # 主色浅色
-BLUE = "#60a5fa"        # 次要蓝
-GREEN = "#22c55e"       # 成功绿
-ORANGE = "#f59e0b"      # 警告橙
-RED = "#ef4444"         # 危险红
-TEXT = "#fafafa"        # 主文字 - 近白
-TEXT_DIM = "#a1a1aa"    # 次要文字
-PH = "#52525b"          # 占位/更淡文字
-# Card border style
-CARD_BORDER = 1         # card border width
-CARD_RADIUS = 10        # card corner radius
+# shadcn/ui dark design tokens
+BG          = "#09090b"
+SB          = "#0b0b10"
+CARD        = "#111115"
+CARD_HOVER  = "#18181f"
+BORDER      = "#1f1f2a"
+BORDER_LIGHT = "#27272f"
+ACCENT      = "#3b82f6"
+ACCENT_HOVER = "#2563eb"
+ACCENT_SOFT  = "#1e3a5f"
+BLUE        = "#60a5fa"
+PURPLE      = "#8b5cf6"
+GREEN       = "#22c55e"
+ORANGE      = "#f59e0b"
+RED         = "#ef4444"
+TEXT        = "#fafafa"
+TEXT_DIM    = "#a1a1aa"
+PH          = "#71717a"
 
 
 class NovelFactoryGUI:
     def __init__(self):
         self.root = ctk.CTk()
-        self.root.title("小说工厂 NovelFactory")
-        self.root.geometry("1320x850")
-        self.root.minsize(1050, 680)
+        self.root.title("小说工厂")
+        self.root.geometry("1360x880")
+        self.root.minsize(1100, 700)
         self.root.configure(fg_color=BG)
         ctk.set_appearance_mode("dark")
 
@@ -103,33 +102,38 @@ class NovelFactoryGUI:
 
     # ─── 侧栏 ────────────────────────────
     def _build_sidebar(self):
-        self.sb = ctk.CTkFrame(self.root, width=185, fg_color=SB, corner_radius=0)
+        self.sb = ctk.CTkFrame(self.root, width=200, fg_color=SB, corner_radius=0)
         self.sb.pack(side="left", fill="y")
         self.sb.pack_propagate(False)
 
         # Logo area
         logo_frame = ctk.CTkFrame(self.sb, fg_color="transparent")
         logo_frame.pack(fill="x", padx=14, pady=(22, 4))
-        ctk.CTkLabel(logo_frame, text="✍",
-                     font=("Segoe UI Emoji", 28)).pack(side="left", padx=(2,8))
-        ctk.CTkLabel(logo_frame, text="写作工坊",
+        ctk.CTkLabel(logo_frame, text="📖",
+                     font=("Segoe UI Emoji", 22)).pack(side="left", padx=(2,8))
+        ctk.CTkLabel(logo_frame, text="小说工厂",
                      font=("Microsoft YaHei", 17, "bold"),
-                     text_color=ACCENT).pack(side="left")
+                     text_color=TEXT).pack(side="left")
         # Divider
         div = ctk.CTkFrame(self.sb, height=1, fg_color=BORDER)
         div.pack(fill="x", padx=14, pady=(10, 12))
 
         self.nav = {}
-        items = [
-            ("bookshelf", "  📊 仪表盘"),
-            ("create",    "  ✍️ 写书"),
-            ("editor",    "  📝 编辑器"),
-            ("analyze",   "  🔍 拆书"),
-            ("reverse",   "  🧬 逆向工程"),
-            ("reader",    "  👥 读者模拟"),
-            ("download",  "  📥 下载"),
-            ("settings",  "  ⚙️ 设置"),
+        nav_sections = [
+            ("创作", [("bookshelf", "  📊 仪表盘"), ("create", "  ✍️ 写书"), ("editor", "  📝 编辑器")]),
+            ("分析", [("analyze", "  🔍 拆书"), ("reverse", "  🧬 逆向"), ("reader", "  👥 读者")]),
+            ("工具", [("download", "  📥 下载"), ("settings", "  ⚙️ 设置")]),
         ]
+        items = []
+        first = True
+        for section_title, section_items in nav_sections:
+            sh = ctk.CTkLabel(self.sb, text=section_title,
+                              font=("Microsoft YaHei", 9, "bold"),
+                              text_color=PH, anchor="w")
+            sh.pack(fill="x", padx=18, pady=(12 if first else 10, 2))
+            first = False
+            for key, label in section_items:
+                items.append((key, label))
         emojis = {
             "bookshelf": "books", "create": "pencil",
             "editor": "pen-nib", "analyze": "mag",
@@ -150,29 +154,24 @@ class NovelFactoryGUI:
         # Bottom status
         bot_div = ctk.CTkFrame(self.sb, height=1, fg_color=BORDER)
         bot_div.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
-        self.status_frame = ctk.CTkFrame(self.sb, fg_color=CARD_HOVER, corner_radius=6)
-        self.status_frame.pack(side="bottom", fill="x", padx=10, pady=(0, 12))
-        self.status_icon = ctk.CTkLabel(self.status_frame, text="o", text_color=GREEN,
-                                         font=("Microsoft YaHei", 11))
-        self.status_icon.pack(side="left", padx=(12, 6), pady=8)
+        self.status_frame = ctk.CTkFrame(self.sb, fg_color="transparent")
+        self.status_frame.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
+        self.status_icon = ctk.CTkLabel(self.status_frame, text="●", text_color=GREEN,
+                                         font=("Segoe UI", 7))
+        self.status_icon.pack(side="left", padx=(6, 6), pady=10)
         self.status_text = ctk.CTkLabel(self.status_frame, text="就绪",
-                                         font=("Microsoft YaHei", 11), text_color=TEXT_DIM)
-        self.status_text.pack(side="left", padx=(0, 12), pady=8)
+                                         font=("Microsoft YaHei", 10), text_color=PH)
+        self.status_text.pack(side="left", pady=10)
 
     def _sect(self, parent, title):
         header_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        header_frame.pack(fill="x", padx=20, pady=(15, 5))
-        # Accent dot
-        ctk.CTkLabel(header_frame, text="●", text_color=ACCENT,
-                     font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+        header_frame.pack(fill="x", padx=20, pady=(12, 0))
         ctk.CTkLabel(header_frame, text=title,
-                     font=("Microsoft YaHei", 16, "bold"),
-                     text_color=ACCENT,
-                     anchor="w").pack(side="left")
-        # Divider line
-        ctk.CTkLabel(parent, text="",
-                     fg_color=BORDER, height=1,
-                     corner_radius=0).pack(fill="x", padx=20, pady=(0, 8))
+                     font=("Microsoft YaHei", 14, "bold"),
+                     text_color=TEXT, anchor="w").pack(side="left")
+        # Subtle divider
+        div = ctk.CTkFrame(parent, height=1, fg_color=BORDER)
+        div.pack(fill="x", padx=20, pady=(2, 8))
 
     def _show_page(self, name):
         self.active_tab = name
@@ -358,8 +357,8 @@ class NovelFactoryGUI:
         self._sect(p, "写书 — 手动分步")
 
         cfg = load_config()["novel"]
-        top = ctk.CTkFrame(p, fg_color=CARD)
-        top.pack(fill="x", padx=20, pady=3)
+        top = ctk.CTkFrame(p, fg_color=CARD, corner_radius=10, border_width=1, border_color=BORDER)
+        top.pack(fill="x", padx=20, pady=(0, 8))
 
         gf = ctk.CTkFrame(top, fg_color="transparent")
         gf.pack(fill="x", padx=15, pady=6)
@@ -383,10 +382,10 @@ class NovelFactoryGUI:
         ctk.CTkEntry(gf, textvariable=self._wc_var, width=70).grid(row=0, column=7, padx=2)
 
         # ── Step indicator (7 steps) ──
-        self.step_frame = ctk.CTkFrame(p, fg_color=CARD)
-        self.step_frame.pack(fill="x", padx=20, pady=3)
-        sf = ctk.CTkFrame(self.step_frame, fg_color="transparent")
-        sf.pack(pady=8)
+        self.step_frame = ctk.CTkFrame(p, fg_color="transparent")
+        self.step_frame.pack(fill="x", padx=20, pady=(0, 4))
+        sf = ctk.CTkFrame(self.step_frame, fg_color=CARD, corner_radius=10, border_width=1, border_color=BORDER)
+        sf.pack(pady=0, fill="x")
         self._step_labels = {}
         self._step_keys = ["step1", "step2", "step3", "step4", "step5", "step6", "step7"]
         self._step_names = {
@@ -400,25 +399,25 @@ class NovelFactoryGUI:
         for i, key in enumerate(self._step_keys):
             name = self._step_names[key]
             c = self._step_colors[key]
-            sf2 = ctk.CTkFrame(sf, fg_color=CARD, corner_radius=8, border_width=1, border_color=BORDER)
-            sf2.pack(side="left", padx=2)
-            lbl = ctk.CTkLabel(sf2, text=f"{i+1}. {name}", font=("Microsoft YaHei", 10), text_color=PH)
-            lbl.pack(padx=8, pady=5)
+            sf2 = ctk.CTkFrame(sf, fg_color="transparent", corner_radius=6)
+            sf2.pack(side="left", padx=1)
+            lbl = ctk.CTkLabel(sf2, text=f"{i+1}.{name}", font=("Microsoft YaHei", 10), text_color=PH)
+            lbl.pack(padx=7, pady=6)
             self._step_labels[key] = lbl
             if i < 6:
-                ctk.CTkLabel(sf, text="›", font=("Segoe UI", 16, "bold"), text_color=PH).pack(side="left", padx=0)
+                ctk.CTkLabel(sf, text="·", font=("Segoe UI", 14, "bold"), text_color=BORDER).pack(side="left", padx=0)
 
         # ── Main area ──
-        mid = ctk.CTkFrame(p, fg_color=BG)
-        mid.pack(fill="both", expand=True, padx=20, pady=3)
+        mid = ctk.CTkFrame(p, fg_color="transparent")
+        mid.pack(fill="both", expand=True, padx=20, pady=(4, 0))
 
         # Left: step panel
-        self._step_panel = ctk.CTkFrame(mid, fg_color=CARD, width=360, corner_radius=10)
-        self._step_panel.pack(side="left", fill="y", padx=(0, 5))
+        self._step_panel = ctk.CTkFrame(mid, fg_color=CARD, width=340, corner_radius=10, border_width=1, border_color=BORDER)
+        self._step_panel.pack(side="left", fill="y", padx=(0, 8))
         self._step_panel.pack_propagate(False)
 
         # Right: editor + log
-        right = ctk.CTkFrame(mid, fg_color=BG)
+        right = ctk.CTkFrame(mid, fg_color="transparent")
         right.pack(side="right", fill="both", expand=True)
 
         # Editable text area
@@ -449,7 +448,7 @@ class NovelFactoryGUI:
                       height=38, width=140).pack(side="left", padx=3)
         self._stop_btn = ctk.CTkButton(btn_frame, text="停止",
                                         command=self._stop,
-                                        fg_color="#555", state="disabled")
+                                        fg_color="#3f3f46", state="disabled")
         self._stop_btn.pack(side="left", padx=3)
         ctk.CTkButton(btn_frame, text="打开目录",
                       command=lambda: self._open_dir(self._book_dir),
@@ -2422,11 +2421,11 @@ class NovelFactoryGUI:
         ctk.CTkButton(bf, text="编辑对话", command=self._run_dialogue_edit,
                       fg_color=BLUE, hover_color="#3b82f6", width=120).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="插入场景", command=self._run_add_scene,
-                      fg_color="#9c27b0", width=120).pack(side="left", padx=3)
+                      fg_color=PURPLE, width=120).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="撤销", command=self._editor_undo,
-                      fg_color="#666", width=80).pack(side="left", padx=3)
+                      fg_color="#52525b", width=80).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="重做", command=self._editor_redo,
-                      fg_color="#666", width=80).pack(side="left", padx=3)
+                      fg_color="#52525b", width=80).pack(side="left", padx=3)
 
         # Result
         ctk.CTkLabel(scroll, text="改稿结果", font=("Microsoft YaHei", 12, "bold"), text_color=ACCENT).pack(anchor="w", pady=(8, 4))
@@ -2533,8 +2532,8 @@ class NovelFactoryGUI:
         # ── Tab bar ──
         tab_bar = ctk.CTkFrame(scroll, fg_color="transparent")
         tab_bar.pack(fill="x", pady=(4, 8))
-        self._reader_tab = ctk.StringVar(value="single")
-        ctk.CTkSegmentedButton(tab_bar, values=["single", "fullbook"], variable=self._reader_tab,
+        self._reader_tab = ctk.StringVar(value="单章分析")
+        ctk.CTkSegmentedButton(tab_bar, values=["单章分析", "全书分析"], variable=self._reader_tab,
                                font=("Microsoft YaHei", 12), selected_color=ACCENT,
                                command=self._on_reader_tab_change).pack(side="left")
 
@@ -2576,7 +2575,7 @@ class NovelFactoryGUI:
         ctk.CTkButton(bf2, text="导出报告(MD)", command=self._export_reader_report,
                       fg_color=BLUE, hover_color="#3b82f6", width=110).pack(side="left", padx=3)
         ctk.CTkButton(bf2, text="可读性扫描", command=self._run_readability,
-                      fg_color="#555", width=100).pack(side="left", padx=3)
+                      fg_color="#3f3f46", width=100).pack(side="left", padx=3)
 
         self._reader_full_status = ctk.CTkLabel(self._reader_full_frame, text="", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
         self._reader_full_status.pack(anchor="w")
@@ -2604,10 +2603,10 @@ class NovelFactoryGUI:
 
         # Show single panel by default
         self._reader_single_frame.pack(fill="x")
-        self._reader_tab.set("single")
+        self._reader_tab.set("单章分析")
 
     def _on_reader_tab_change(self, val):
-        if val == "single":
+        if val == "单章分析":
             self._reader_full_frame.pack_forget()
             self._reader_single_frame.pack(fill="x", before=self._reader_result.master.winfo_children()[self._reader_result.master.winfo_children().index(self._reader_result)])
         else:
@@ -2911,7 +2910,7 @@ class NovelFactoryGUI:
                                       fg_color=ACCENT, hover_color=ACCENT_HOVER, font=("Microsoft YaHei", 13), width=140)
         self._dl_btn.pack(side="left", padx=3)
         ctk.CTkButton(bf, text="停止", command=self._stop_download,
-                      fg_color="#555", width=80).pack(side="left", padx=3)
+                      fg_color="#3f3f46", width=80).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="在 Obsidian 打开", command=lambda: self._open_in_obsidian(self._dl_last_dir if hasattr(self, "_dl_last_dir") else ""),
                       fg_color="#7c4dff", width=120).pack(side="right", padx=3)
 
