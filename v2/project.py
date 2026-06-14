@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """project.py — 项目管理核心：统一目录结构、项目元数据、知识库"""
 
 import os

@@ -1,3 +1,3 @@
-﻿# test script
+# test script
 print('hello')
 print('world')

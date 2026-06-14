@@ -1,4 +1,4 @@
-﻿with open("gui.py", "r", encoding="utf-8") as f:
+with open("gui.py", "r", encoding="utf-8") as f:
     content = f.read()
 
 # Find _show_step_panel and add extra requirements section after the info Textbox

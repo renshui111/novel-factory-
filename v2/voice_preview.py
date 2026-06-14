@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """voice_preview.py --- AI配音 + 有声书预览
 生成TTS脚本、角色音色分配、语速标记
 注意：实际音频生成需配合TTS引擎（edge-tts/azure等），此模块生成标注脚本

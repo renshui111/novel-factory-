@@ -1,4 +1,4 @@
-﻿with open("gui.py", "r", encoding="utf-8") as f:
+with open("gui.py", "r", encoding="utf-8") as f:
     content = f.read()
 
 # 1. Add download import

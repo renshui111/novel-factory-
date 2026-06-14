@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """dashboard.py — AI写作导演台：章节队列、质量评分、多版本管理、智能上下文"""
 
 import os, re, json, time

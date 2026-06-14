@@ -1,4 +1,4 @@
-﻿with open("gui.py", "r", encoding="utf-8") as f:
+with open("gui.py", "r", encoding="utf-8") as f:
     content = f.read()
 
 # Insert helper methods before _ai_generate_step

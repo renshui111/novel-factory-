@@ -1,4 +1,4 @@
-﻿with open("gui.py", "r", encoding="utf-8") as f:
+with open("gui.py", "r", encoding="utf-8") as f:
     content = f.read()
 
 # Find _render_project_list and enhance it to show platform/author

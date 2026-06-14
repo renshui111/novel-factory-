@@ -1,4 +1,4 @@
-﻿with open("gui.py", "r", encoding="utf-8") as f:
+with open("gui.py", "r", encoding="utf-8") as f:
     content = f.read()
 
 old = '        self._current_step = "step1"\n        self._step_results = {}  # {step_key: text}\n        self._show_step_panel("step1")'

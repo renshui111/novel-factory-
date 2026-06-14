@@ -1,4 +1,4 @@
-﻿import sys, io
+import sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 with open("gui.py", "r", encoding="utf-8") as f:

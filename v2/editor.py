@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """editor.py --- AI交互式编辑器
 对话式改稿：给指令→AI重写→before/after对比→可回退
 """

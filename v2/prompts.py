@@ -1,4 +1,4 @@
-﻿# prompts.py — 所有提示词模板
+# prompts.py — 所有提示词模板
 # 整合自 AI_NovelGenerator + oh-story + chinese-novelist 的思路
 
 # ═══════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-﻿import os, sys
+import os, sys
 
 # More aggressive monkey-patching for sandbox
 import pathlib

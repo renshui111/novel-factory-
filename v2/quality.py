@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """quality.py --- 四层文笔防线
 Layer 1: 生成时约束（prompt注入）
 Layer 2: 生成后6维评分

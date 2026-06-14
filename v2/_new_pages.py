@@ -1,4 +1,4 @@
-﻿# Inserts at line 3030 - 5 new page build methods
+# Inserts at line 3030 - 5 new page build methods
     # ══════════════════════════════════════
     # 页面: AI交互式编辑器
     # ══════════════════════════════════════

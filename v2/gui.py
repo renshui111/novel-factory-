@@ -1,4 +1,4 @@
-﻿# gui.py — Novel Factory GUI v1.1
+# gui.py — Novel Factory GUI v1.1
 # 黑暗风 + 分步引导 + 侧栏导航
 
 from __future__ import annotations

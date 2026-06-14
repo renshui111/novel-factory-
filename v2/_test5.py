@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os
 BASE = r"D:\项目\小说工厂\v2"
 def read(name):
