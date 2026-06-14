@@ -36,29 +36,33 @@ from reader_sim import simulate_reader, simulate_all_readers, predict_abandonmen
 from downloader import download_novel, detect_platform, PLATFORMS
 from reverse_engineer import reverse_engineer, apply_formula_to_new_book
 
-BG = "#111318"
-SB = "#181b23"
-CARD = "#1f2230"
-CARD_HOVER = "#292d3d"
-ACCENT = "#f0a040"
-ACCENT_HOVER = "#f5b860"
-ACCENT_LIGHT = "#f8d090"
-BLUE = "#5b9bd5"
-GREEN = "#6bba62"
-ORANGE = "#e8913a"
-RED = "#e05555"
-TEXT = "#e2e4e9"
-TEXT_DIM = "#8a8f9a"
-PH = "#5a5f6b"
-BORDER = "#2a2d38"
+# ── shadcn/ui inspired dark design system ──
+BG = "#09090b"          # 页面背景 - 极深
+SB = "#0d0d12"          # 侧栏背景
+CARD = "#13131a"        # 卡片背景
+CARD_HOVER = "#1a1a24"  # 卡片悬停
+BORDER = "#1e1e2a"      # 边框/分割线
+ACCENT = "#3b82f6"      # 主色调 - 清爽蓝
+ACCENT_HOVER = "#2563eb" # 主色悬停
+ACCENT_LIGHT = "#93c5fd" # 主色浅色
+BLUE = "#60a5fa"        # 次要蓝
+GREEN = "#22c55e"       # 成功绿
+ORANGE = "#f59e0b"      # 警告橙
+RED = "#ef4444"         # 危险红
+TEXT = "#fafafa"        # 主文字 - 近白
+TEXT_DIM = "#a1a1aa"    # 次要文字
+PH = "#52525b"          # 占位/更淡文字
+# Card border style
+CARD_BORDER = 1         # card border width
+CARD_RADIUS = 10        # card corner radius
 
 
 class NovelFactoryGUI:
     def __init__(self):
         self.root = ctk.CTk()
-        self.root.title("写书工坊 — AI Writing Studio")
-        self.root.geometry("1250x800")
-        self.root.minsize(1000, 650)
+        self.root.title("小说工厂 NovelFactory")
+        self.root.geometry("1320x850")
+        self.root.minsize(1050, 680)
         self.root.configure(fg_color=BG)
         ctk.set_appearance_mode("dark")
 
@@ -99,7 +103,7 @@ class NovelFactoryGUI:
 
     # ─── 侧栏 ────────────────────────────
     def _build_sidebar(self):
-        self.sb = ctk.CTkFrame(self.root, width=170, fg_color=SB, corner_radius=0)
+        self.sb = ctk.CTkFrame(self.root, width=185, fg_color=SB, corner_radius=0)
         self.sb.pack(side="left", fill="y")
         self.sb.pack_propagate(False)
 
@@ -117,14 +121,14 @@ class NovelFactoryGUI:
 
         self.nav = {}
         items = [
-            ("bookshelf", "  仪表盘"),
-            ("create",    "  写书"),
-            ("editor",    "  编辑器"),
-            ("analyze",   "  拆书"),
-            ("reverse",   "  逆向工程"),
-            ("reader",    "  读者模拟"),
-            ("download",  "  下载"),
-            ("settings",  "  设置"),
+            ("bookshelf", "  📊 仪表盘"),
+            ("create",    "  ✍️ 写书"),
+            ("editor",    "  📝 编辑器"),
+            ("analyze",   "  🔍 拆书"),
+            ("reverse",   "  🧬 逆向工程"),
+            ("reader",    "  👥 读者模拟"),
+            ("download",  "  📥 下载"),
+            ("settings",  "  ⚙️ 设置"),
         ]
         emojis = {
             "bookshelf": "books", "create": "pencil",
@@ -135,12 +139,12 @@ class NovelFactoryGUI:
         for key, label in items:
             btn = ctk.CTkButton(
                 self.sb, text=label,
-                font=("Microsoft YaHei", 13),
+                font=("Microsoft YaHei", 12),
                 fg_color="transparent", text_color=TEXT_DIM,
-                hover_color=CARD_HOVER, anchor="w", height=38, corner_radius=6,
-                border_spacing=0,
+                hover_color=CARD_HOVER, anchor="w", height=36, corner_radius=8,
+                border_spacing=6,
                 command=lambda k=key: self._show_page(k))
-            btn.pack(fill="x", padx=8, pady=1)
+            btn.pack(fill="x", padx=6, pady=1)
             self.nav[key] = btn
 
         # Bottom status
@@ -396,13 +400,13 @@ class NovelFactoryGUI:
         for i, key in enumerate(self._step_keys):
             name = self._step_names[key]
             c = self._step_colors[key]
-            sf2 = ctk.CTkFrame(sf, fg_color=CARD_HOVER, corner_radius=6)
+            sf2 = ctk.CTkFrame(sf, fg_color=CARD, corner_radius=8, border_width=1, border_color=BORDER)
             sf2.pack(side="left", padx=2)
             lbl = ctk.CTkLabel(sf2, text=f"{i+1}. {name}", font=("Microsoft YaHei", 10), text_color=PH)
-            lbl.pack(padx=6, pady=4)
+            lbl.pack(padx=8, pady=5)
             self._step_labels[key] = lbl
             if i < 6:
-                ctk.CTkLabel(sf, text="→", font=("Microsoft YaHei", 12), text_color=BORDER).pack(side="left", padx=1)
+                ctk.CTkLabel(sf, text="›", font=("Segoe UI", 16, "bold"), text_color=PH).pack(side="left", padx=0)
 
         # ── Main area ──
         mid = ctk.CTkFrame(p, fg_color=BG)
@@ -2060,7 +2064,7 @@ class NovelFactoryGUI:
         p = self.pages["bookshelf"]
 
         # ── 顶部卡片区 ──
-        top = ctk.CTkFrame(p, fg_color=CARD, corner_radius=10)
+        top = ctk.CTkFrame(p, fg_color=CARD, corner_radius=10, border_width=1, border_color=BORDER)
         top.pack(fill="x", padx=20, pady=(8,4))
 
         top_inner = ctk.CTkFrame(top, fg_color="transparent")
@@ -2157,7 +2161,7 @@ class NovelFactoryGUI:
             strip = ctk.CTkFrame(card_outer, width=4, fg_color=accent_strip, corner_radius=0)
             strip.pack(side="left", fill="y", padx=(0, 0))
             
-            card = ctk.CTkFrame(card_outer, fg_color=CARD, corner_radius=8)
+            card = ctk.CTkFrame(card_outer, fg_color=CARD, corner_radius=8, border_width=1, border_color=BORDER)
             card.pack(side="left", fill="x", expand=True)
 
             # Row 1: Title + genre badge + chapter dots
@@ -2414,9 +2418,9 @@ class NovelFactoryGUI:
         bf = ctk.CTkFrame(scroll, fg_color="transparent")
         bf.pack(fill="x", pady=(4, 8))
         ctk.CTkButton(bf, text="AI改稿", command=self._run_editor_edit,
-                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=140).pack(side="left", padx=3)
+                      fg_color=ACCENT, hover_color=ACCENT_HOVER, font=("Microsoft YaHei", 13), width=140).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="编辑对话", command=self._run_dialogue_edit,
-                      fg_color=BLUE, width=120).pack(side="left", padx=3)
+                      fg_color=BLUE, hover_color="#3b82f6", width=120).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="插入场景", command=self._run_add_scene,
                       fg_color="#9c27b0", width=120).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="撤销", command=self._editor_undo,
@@ -2570,7 +2574,7 @@ class NovelFactoryGUI:
                                               fg_color=ACCENT, font=("Microsoft YaHei", 13), width=180)
         self._reader_full_btn.pack(side="left", padx=3)
         ctk.CTkButton(bf2, text="导出报告(MD)", command=self._export_reader_report,
-                      fg_color=BLUE, width=110).pack(side="left", padx=3)
+                      fg_color=BLUE, hover_color="#3b82f6", width=110).pack(side="left", padx=3)
         ctk.CTkButton(bf2, text="可读性扫描", command=self._run_readability,
                       fg_color="#555", width=100).pack(side="left", padx=3)
 
@@ -2771,9 +2775,9 @@ class NovelFactoryGUI:
         bf = ctk.CTkFrame(scroll, fg_color="transparent")
         bf.pack(fill="x", pady=(4, 8))
         ctk.CTkButton(bf, text="开始解构", command=self._run_reverse,
-                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=140).pack(side="left", padx=3)
+                      fg_color=ACCENT, hover_color=ACCENT_HOVER, font=("Microsoft YaHei", 13), width=140).pack(side="left", padx=3)
         ctk.CTkButton(bf, text="套用公式生成大纲", command=self._run_apply_formula,
-                      fg_color=BLUE, width=140).pack(side="left", padx=3)
+                      fg_color=BLUE, hover_color="#3b82f6", width=140).pack(side="left", padx=3)
 
         # Result
         self._reverse_result = ctk.CTkTextbox(scroll, height=380, font=("Microsoft YaHei", 11), fg_color=CARD, text_color=TEXT, wrap="word")
@@ -2831,23 +2835,48 @@ class NovelFactoryGUI:
     # ══════════════════════════════════════
     # 页面: 排行榜模拟
     # ══════════════════════════════════════
-    # Obsidian路径
-    OBSIDIAN_EXE = r"C:\Users\CodexSandboxOffline\AppData\Local\Programs\Obsidian\Obsidian.exe"
-
     def _open_in_obsidian(self, path):
-        """在 Obsidian 中打开指定目录"""
-        import subprocess
+        """在 Obsidian 中打开指定目录
+        
+        原理：
+        1. 你的小说保存在 output_dir/书名/ 下
+        2. 每本书是一个完整目录（正文/设定/大纲等都在里面）
+        3. 点击按钮 → 调用 Obsidian.exe 打开这个目录
+        4. Obsidian 将其作为 Vault 打开，你可以在 Obsidian 里：
+           - 编辑所有 .md 文件
+           - 用 [[双向链接]] 串联角色/设定/章节
+           - 用图谱视图看人物关系
+           - 用 Obsidian 插件增强写作体验
+        """
+        import subprocess, webbrowser
+        
         if not path or not os.path.isdir(path):
             return
+        
+        # 方法1: 直接用 Obsidian URI（最可靠）
+        obs_uri = f"obsidian://open?path={path.replace(chr(92), '/')}"
         try:
-            subprocess.Popen([self.OBSIDIAN_EXE, path], shell=False)
-        except FileNotFoundError:
-            # Try shortcut path
-            obs_path = r"C:\Users\g\AppData\Local\Programs\Obsidian\Obsidian.exe"
-            try:
-                subprocess.Popen([obs_path, path], shell=False)
-            except Exception:
-                pass
+            webbrowser.open(obs_uri)
+            return
+        except Exception:
+            pass
+        
+        # 方法2: 直接启动 Obsidian.exe
+        obs_paths = [
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Obsidian", "Obsidian.exe"),
+            r"C:\Users\g\AppData\Local\Programs\Obsidian\Obsidian.exe",
+        ]
+        for obs_path in obs_paths:
+            if os.path.isfile(obs_path):
+                try:
+                    subprocess.Popen([obs_path, path], shell=False)
+                    return
+                except Exception:
+                    continue
+        
+        # 方法3: 兜底 - 打开文件夹
+        try:
+            os.startfile(path)
         except Exception:
             pass
 
@@ -2879,7 +2908,7 @@ class NovelFactoryGUI:
         bf = ctk.CTkFrame(scroll, fg_color="transparent")
         bf.pack(fill="x", pady=(4, 8))
         self._dl_btn = ctk.CTkButton(bf, text="开始下载", command=self._start_download,
-                                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=140)
+                                      fg_color=ACCENT, hover_color=ACCENT_HOVER, font=("Microsoft YaHei", 13), width=140)
         self._dl_btn.pack(side="left", padx=3)
         ctk.CTkButton(bf, text="停止", command=self._stop_download,
                       fg_color="#555", width=80).pack(side="left", padx=3)
