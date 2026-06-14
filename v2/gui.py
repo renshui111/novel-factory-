@@ -33,6 +33,7 @@ from export import (
 )
 from editor import edit_chapter, edit_dialogue, add_scene, EditHistory
 from reader_sim import simulate_reader, simulate_all_readers, predict_abandonment, get_readability_score
+from downloader import download_novel, detect_platform, PLATFORMS
 from reverse_engineer import reverse_engineer, apply_formula_to_new_book
 
 BG = "#111318"
@@ -122,13 +123,14 @@ class NovelFactoryGUI:
             ("analyze",   "  拆书"),
             ("reverse",   "  逆向工程"),
             ("reader",    "  读者模拟"),
+            ("download",  "  下载"),
             ("settings",  "  设置"),
         ]
         emojis = {
             "bookshelf": "books", "create": "pencil",
             "editor": "pen-nib", "analyze": "mag",
             "reverse": "cube", "reader": "people",
-            "settings": "gear",
+            "download": "download", "settings": "gear",
         }
         for key, label in items:
             btn = ctk.CTkButton(
@@ -190,7 +192,7 @@ class NovelFactoryGUI:
         self.main_area = ctk.CTkFrame(self.root, fg_color=BG, corner_radius=0)
         self.main_area.pack(side="right", fill="both", expand=True)
 
-        names = ["bookshelf", "create", "editor", "analyze", "reverse", "reader", "settings"]
+        names = ["bookshelf", "create", "editor", "analyze", "reverse", "reader", "download", "settings"]
         self.pages = {}
         for n in names:
             self.pages[n] = ctk.CTkFrame(self.main_area, fg_color=BG, corner_radius=0)
@@ -200,6 +202,7 @@ class NovelFactoryGUI:
         self._build_reverse()
         self._build_editor_page()
         self._build_reader()
+        self._build_download()
         self._build_settings()
 
     # ══════════════════════════════════════
@@ -2212,6 +2215,27 @@ class NovelFactoryGUI:
                 ctk.CTkLabel(row2, text=f"计划{chap_count}章 · 已写{word_count:,}字",
                              font=("Segoe UI", 11), text_color=TEXT_DIM).pack(side="left")
 
+            # Show platform/author if available
+            path = proj.get("path", "")
+            if path:
+                try:
+                    import json
+                    mp = os.path.join(path, "项目元数据.json")
+                    if os.path.exists(mp):
+                        bm = json.loads(open(mp, "r", encoding="utf-8").read())
+                        platform = bm.get("platform", "")
+                        author = bm.get("author", "")
+                        extra_info = []
+                        if platform:
+                            extra_info.append(platform)
+                        if author:
+                            extra_info.append(f"@{author}")
+                        if extra_info:
+                            ctk.CTkLabel(row2, text=" | ".join(extra_info),
+                                         font=("Microsoft YaHei", 9), text_color=ACCENT_LIGHT).pack(side="left", padx=10)
+                except Exception:
+                    pass
+
             ctk.CTkLabel(row2, text=f"更新: {proj.get('last_update','-')[:10]}",
                          font=("Segoe UI", 10), text_color=PH).pack(side="right")
 
@@ -2234,6 +2258,11 @@ class NovelFactoryGUI:
                           fg_color=BLUE, text_color="white", corner_radius=6,
                           font=("Segoe UI", 10, "bold"),
                           command=lambda p=book_path: self._quick_export(p, "txt")).pack(side="left", padx=2)
+
+            ctk.CTkButton(row3, text="Obsidian", width=65, height=30,
+                          fg_color="#7c4dff", text_color="white", corner_radius=6,
+                          font=("Microsoft YaHei", 10),
+                          command=lambda p=book_path: self._open_in_obsidian(p)).pack(side="right", padx=2)
 
             ctk.CTkButton(row3, text="删除", width=55, height=30,
                           fg_color="transparent", text_color=RED, corner_radius=6,
@@ -2802,6 +2831,107 @@ class NovelFactoryGUI:
     # ══════════════════════════════════════
     # 页面: 排行榜模拟
     # ══════════════════════════════════════
+    # Obsidian路径
+    OBSIDIAN_EXE = r"C:\Users\CodexSandboxOffline\AppData\Local\Programs\Obsidian\Obsidian.exe"
+
+    def _open_in_obsidian(self, path):
+        """在 Obsidian 中打开指定目录"""
+        import subprocess
+        if not path or not os.path.isdir(path):
+            return
+        try:
+            subprocess.Popen([self.OBSIDIAN_EXE, path], shell=False)
+        except FileNotFoundError:
+            # Try shortcut path
+            obs_path = r"C:\Users\g\AppData\Local\Programs\Obsidian\Obsidian.exe"
+            try:
+                subprocess.Popen([obs_path, path], shell=False)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # ================================================================
+    # 页面: 下载
+    # ================================================================
+    def _build_download(self):
+        p = self.pages["download"]
+        self._sect(p, "小说下载")
+        scroll = ctk.CTkScrollableFrame(p, fg_color=BG)
+        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+
+        ctk.CTkLabel(scroll, text="粘贴小说URL（目录页或第一章）", font=("Microsoft YaHei", 12), text_color=TEXT).pack(anchor="w", pady=(8, 4))
+        urlf = ctk.CTkFrame(scroll, fg_color=CARD_HOVER, corner_radius=6)
+        urlf.pack(fill="x", pady=(0, 8))
+        self._dl_url = ctk.CTkEntry(urlf, font=("Microsoft YaHei", 10), fg_color=CARD, text_color=TEXT, height=32,
+                                     placeholder_text="https://...")
+        self._dl_url.pack(side="left", fill="x", expand=True, padx=8, pady=6)
+
+        # Platform info
+        inf = ctk.CTkFrame(scroll, fg_color="transparent")
+        inf.pack(fill="x", pady=(4, 8))
+        self._dl_platform_label = ctk.CTkLabel(inf, text="检测平台：", font=("Microsoft YaHei", 11), text_color=TEXT_DIM)
+        self._dl_platform_label.pack(side="left")
+        ctk.CTkButton(inf, text="检测", command=self._detect_dl_platform,
+                      fg_color=CARD_HOVER, width=50, height=26).pack(side="left", padx=4)
+
+        # Buttons
+        bf = ctk.CTkFrame(scroll, fg_color="transparent")
+        bf.pack(fill="x", pady=(4, 8))
+        self._dl_btn = ctk.CTkButton(bf, text="开始下载", command=self._start_download,
+                                      fg_color=ACCENT, font=("Microsoft YaHei", 13), width=140)
+        self._dl_btn.pack(side="left", padx=3)
+        ctk.CTkButton(bf, text="停止", command=self._stop_download,
+                      fg_color="#555", width=80).pack(side="left", padx=3)
+        ctk.CTkButton(bf, text="在 Obsidian 打开", command=lambda: self._open_in_obsidian(self._dl_last_dir if hasattr(self, "_dl_last_dir") else ""),
+                      fg_color="#7c4dff", width=120).pack(side="right", padx=3)
+
+        # Log
+        self._dl_log = ctk.CTkTextbox(scroll, fg_color="#10121c", text_color=TEXT,
+                                       font=("Consolas", 11), height=300)
+        self._dl_log.pack(fill="both", expand=True)
+        self._dl_status = ctk.CTkLabel(scroll, text="就绪 — 支持番茄小说、起点、纵横等平台", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
+        self._dl_status.pack(anchor="w", pady=(4, 8))
+
+        self._dl_stop_flag = None
+        self._dl_last_dir = ""
+
+    def _detect_dl_platform(self):
+        url = self._dl_url.get().strip()
+        if not url:
+            return
+        platform = detect_platform(url)
+        name = PLATFORMS.get(platform, {}).get("name", "未知")
+        self._dl_platform_label.configure(text=f"检测平台：{name}", text_color=GREEN)
+
+    def _start_download(self):
+        url = self._dl_url.get().strip()
+        if not url:
+            self._dl_status.configure(text="请粘贴小说URL")
+            return
+        self._dl_stop_flag = threading.Event()
+        self._dl_btn.configure(state="disabled", text="下载中...")
+        self._dl_log.delete("1.0", "end")
+        self._dl_status.configure(text="正在连接...")
+        def task():
+            result = download_novel(url, log_callback=lambda m: self._log(self._dl_log, m),
+                                    stop_flag=self._dl_stop_flag)
+            if "error" in result:
+                self.root.after(0, lambda: self._dl_status.configure(text=result["error"], text_color=RED))
+            else:
+                self._dl_last_dir = result.get("book_dir", "")
+                self.root.after(0, lambda: self._dl_status.configure(
+                    text=f"下载完成: {result['title']} ({result['downloaded']}章, {result['total_words']:,}字) | 作者: {result.get('author', '未知')}",
+                    text_color=GREEN))
+            self.root.after(0, lambda: self._dl_btn.configure(state="normal", text="开始下载"))
+        import threading
+        threading.Thread(target=task, daemon=True).start()
+
+    def _stop_download(self):
+        if self._dl_stop_flag:
+            self._dl_stop_flag.set()
+            self._dl_status.configure(text="已停止")
+
     def _on_close(self):
         try:
             self.stop_flag.set()
