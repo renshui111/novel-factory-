@@ -1,4 +1,4 @@
-# gui.py — Novel Factory GUI v1.1
+﻿# gui.py — Novel Factory GUI v1.1
 # 黑暗风 + 分步引导 + 侧栏导航
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ ACCENT_HOVER = "#2563eb"
 ACCENT_SOFT  = "#1e3a5f"
 BLUE        = "#60a5fa"
 PURPLE      = "#8b5cf6"
+ACCENT_LIGHT = "#93c5fd"
 GREEN       = "#22c55e"
 ORANGE      = "#f59e0b"
 RED         = "#ef4444"
@@ -489,7 +490,7 @@ class NovelFactoryGUI:
         header.pack(anchor="w", padx=15, pady=(12, 5))
 
         descriptions = {
-            "step1": "输入主题后点击「AI 生成」，AI 将生成完整的小说大纲，\n包括分卷结构、每章概要、高潮节点、爽点分布。\n生成后可在右侧编辑区修改。",
+            "step1": "输入主题后点击「AI 生成」，AI 将生成完整的小说大纲，\n包括分卷结构、每章概要、高潮节点、爽点分布。\n生成后可在右侧编辑区修改。\n\n可点击「导入拆书公式」将已拆书籍的节奏/爽点/钩子\n技法注入大纲生成。",
             "step2": "根据大纲生成世界观设定：时代背景、力量体系、\n势力分布、地理格局、特殊规则、货币资源。",
             "step3": "生成人物设定：主角、重要配角、反派的详细信息，\n包括性格、背景、能力、动机、成长弧线。",
             "step4": "生成组织/势力体系：宗门、国家、佣兵团等，\n各组织的等级、资源、历史恩怨。",
@@ -506,7 +507,7 @@ class NovelFactoryGUI:
                                text_color=TEXT, font=("Microsoft YaHei", 10), state="disabled")
         info.pack(fill="x", padx=12, pady=5)
         summary_texts = {
-            "step1": "大纲会保存在「大纲.md」\n后续步骤依赖大纲内容",
+            "step1": "大纲会保存在「大纲.md」\n后续步骤依赖大纲内容\n\n可导入拆书公式增强生成",
             "step2": "世界观保存在「世界观.md」\n核心设定，影响全局",
             "step3": "人物保存在「人物设定.md」\n至少10个角色的详细档案",
             "step4": "组织保存在「组织设定.md」\n势力的权力结构和利益关系",
@@ -558,6 +559,15 @@ class NovelFactoryGUI:
             self._extra_req_text.bind("<FocusIn>", lambda e: self._on_extra_focus_in(ph))
             self._extra_req_text.bind("<FocusOut>", lambda e: self._on_extra_focus_out(ph))
 
+        # Step1: add import formula button
+        if step_key == "step1":
+            ctk.CTkButton(self._step_panel, text="导入拆书公式",
+                          command=self._import_analyze_formula,
+                          fg_color=PURPLE, hover_color="#7c3aed",
+                          width=140, height=28,
+                          font=("Microsoft YaHei", 11)).pack(pady=4, padx=15)
+            self._formula_ref = ""  # Store imported formula text
+
         # Show existing result if any
         if step_key in self._step_results and self._step_results[step_key]:
             self._create_editor.delete("1.0", "end")
@@ -601,6 +611,56 @@ class NovelFactoryGUI:
                 self._extra_req_text.insert("1.0", placeholder)
                 self._extra_req_text.configure(text_color=PH)
 
+    def _import_analyze_formula(self):
+        """从已拆书籍导入写作公式，注入大纲生成"""
+        from project import get_output_dir
+        output_dir = get_output_dir()
+        # Find projects with analyze data
+        import os
+        candidates = []
+        if os.path.isdir(output_dir):
+            for name in os.listdir(output_dir):
+                path = os.path.join(output_dir, name)
+                rep_file = os.path.join(path, "可复制公式.md")
+                if os.path.isfile(rep_file):
+                    candidates.append((name, path, rep_file))
+        
+        if not candidates:
+            # Also check for reverse_engineer results
+            for name in os.listdir(output_dir):
+                path = os.path.join(output_dir, name)
+                if os.path.isdir(path):
+                    for fname in os.listdir(path):
+                        if "公式" in fname or "template" in fname.lower() or "formula" in fname.lower():
+                            candidates.append((name, path, os.path.join(path, fname)))
+        
+        if not candidates:
+            self._log(self._create_log, "未找到已拆书籍的公式文件。请先在「拆书」或「逆向工程」中分析一本书。")
+            return
+        
+        # Show selection dialog
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("选择参考书籍")
+        dialog.geometry("400x350")
+        dialog.configure(fg_color=BG)
+        
+        ctk.CTkLabel(dialog, text="选择一本已拆书籍的写作公式：",
+                     font=("Microsoft YaHei", 13, "bold"), text_color=TEXT).pack(pady=10)
+        
+        for name, path, rep_file in candidates:
+            def make_cb(n, f):
+                def cb():
+                    from core import read_file
+                    formula = read_file(f)
+                    self._formula_ref = formula[:2000]
+                    self._log(self._create_log, f"已导入《{n}》的写作公式 ({len(formula)}字)")
+                    self._log(self._create_log, "公式将在生成大纲时注入AI prompt")
+                    dialog.destroy()
+                return cb
+            ctk.CTkButton(dialog, text=name, command=make_cb(name, rep_file),
+                          fg_color=CARD, hover_color=CARD_HOVER, text_color=TEXT,
+                          anchor="w", height=36).pack(fill="x", padx=20, pady=3)
+
     def _ai_generate_step(self, step_key):
         """为指定步骤调用 AI 生成"""
         topic = self._topic_var.get().strip()
@@ -636,6 +696,10 @@ class NovelFactoryGUI:
                 if step_key == "step1":
                     book_dir = prepare_book_dir(topic)
                     self._book_dir = book_dir
+                    # If formula imported, append to extra requirements
+                    formula = getattr(self, '_formula_ref', '')
+                    if formula:
+                        extra = (extra + "\n\n[参考写作公式]\n" + formula) if extra else f"[参考写作公式]\n{formula}"
                     result = generate_outline(topic, genre, num_ch, wc, book_dir,
                                               log_callback=lambda m: self._log(self._create_log, m),
                                               extra_requirements=extra)

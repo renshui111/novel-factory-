@@ -17,6 +17,7 @@ from prompts import (
     CONSISTENCY_CHECK_PROMPT, EXTRACT_CHARACTERS_PROMPT
 )
 from deslop import rule_based_deslop
+from snapshot import should_snapshot, take_snapshot, get_snapshot_context
 
 CHECKPOINT_FILE = "checkpoint.json"
 
@@ -552,6 +553,10 @@ def generate_novel(config: dict = None,
                     _vector_ctx.add_chapter(ch['num'], ch['title'], result["content"])
                 # 更新断点摘要
                 save_checkpoint(book_dir, chapters_done, new_summary or current_summ)
+                
+                # 角色状态快照（每10章）
+                if should_snapshot(chapters_done):
+                    take_snapshot(book_dir, chapters_done, log_callback=log_callback)
 
     stop_auto_save()
 
@@ -834,6 +839,11 @@ def continue_novel(book_dir: str, additional_chapters: int = 10,
         # 从目录获取章节标题
         ch_title = f"续写第{ch_num}章"
 
+        # 注入角色快照（优先于全文摘要）
+        snap_ctx = get_snapshot_context(book_dir, max_chars=1500)
+        if snap_ctx:
+            current_summary = current_summary + chr(10)*2 + snap_ctx
+
         prompt = CHAPTER_GENERATION.format(
             chapter_num=ch_num, novel_setting=novel_setting,
             directory=directory_text, summary_text=current_summary,
@@ -882,6 +892,10 @@ def continue_novel(book_dir: str, additional_chapters: int = 10,
 
         # 存断点
         save_checkpoint(book_dir, chapters_done, summary)
+        
+        # 角色状态快照
+        if should_snapshot(chapters_done):
+            take_snapshot(book_dir, chapters_done, log_callback=log_callback)
 
     elapsed = time.time() - start_time
     res = {
