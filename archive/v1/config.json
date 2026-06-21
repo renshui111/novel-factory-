@@ -1,0 +1,28 @@
+{
+    "llm": {
+        "provider": "openai",
+        "api_key": "",
+        "base_url": "https://api.openai.com/v1",
+        "model_name": "gpt-4o-mini",
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "timeout": 600
+    },
+    "local_llm": {
+        "provider": "ollama",
+        "api_key": "ollama",
+        "base_url": "http://localhost:11434/v1",
+        "model_name": "qwen2.5:14b",
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "timeout": 600
+    },
+    "use_local": false,
+    "output_dir": "",
+    "novel": {
+        "topic": "",
+        "genre": "玄幻",
+        "num_chapters": 30,
+        "words_per_chapter": 3000
+    }
+}

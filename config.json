@@ -1,28 +1,22 @@
 {
   "llm": {
-    "provider": "dashscope",
-    "api_key": "sk-f4a009a413784483b5eeb731cd44b7c3",
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "model_name": "deepseek-v4-pro",
-    "temperature": 0.7,
-    "max_tokens": 8192,
-    "timeout": 120
+    "provider": "openai",
+    "api_key": "tp-cx9826b96v20svc2higc6ln0l8833wmp7b5yf6kdj8q1k7yq",
+    "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+    "model_name": "MiMo-V2.5-Pro"
   },
   "local_llm": {
-    "provider": "ollama",
-    "api_key": "ollama",
     "base_url": "http://localhost:11435/v1",
-    "model_name": "qwen2.5-chat:7b-instruct-q4_K_M",
-    "temperature": 0.7,
-    "max_tokens": 8192,
-    "timeout": 600
+    "model_name": "qwen2.5-chat:7b-instruct-q4_K_M"
   },
   "use_local": false,
-  "output_dir": "",
+  "output_dir": "C:/Users/g/Desktop/小说",
   "novel": {
     "topic": "离职后我成了前公司的甲方",
     "genre": "都市·商战·重生",
     "num_chapters": 30,
-    "words_per_chapter": 3000
-  }
+    "words_per_chapter": 3000,
+    "platform_style": "番茄爽文"
+  },
+  "workspace_dir": "C:/Users/g/Desktop/小说"
 }

@@ -6,7 +6,7 @@ import re
 import json
 import time
 from datetime import datetime
-from core import read_file, write_file, ensure_dir, count_words, get_output_dir
+from core.utils import read_file, write_file, ensure_dir, count_words, get_output_dir, get_workspace_dir, get_book_dir
 
 
 # ═══════════════════════════════════════════════════════════
@@ -34,10 +34,7 @@ KNOWLEDGE_FILES = {
 
 def make_book_dir(topic: str) -> str:
     """根据书名创建标准化项目目录"""
-    dir_name = re.sub(r'[\\/:*?"<>|]', '', topic)[:30].strip()
-    if not dir_name:
-        dir_name = f"novel_{int(time.time())}"
-    book_dir = os.path.join(get_output_dir(), dir_name)
+    book_dir = get_book_dir(topic)
     ensure_dir(book_dir)
     for subdir in PROJECT_STRUCTURE:
         ensure_dir(os.path.join(book_dir, subdir))
@@ -262,7 +259,7 @@ def discover_projects(output_dir: str = "") -> list:
     """扫描 output 目录，发现所有已有项目"""
     if not output_dir:
         try:
-            output_dir = get_output_dir()
+            output_dir = get_workspace_dir()
         except Exception:
             return []
     if not os.path.isdir(output_dir):

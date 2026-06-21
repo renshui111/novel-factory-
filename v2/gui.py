@@ -1,4 +1,4 @@
-﻿# gui.py — Novel Factory GUI v1.1
+# gui.py — Novel Factory GUI v1.1
 # 黑暗风 + 分步引导 + 侧栏导航
 
 from __future__ import annotations
@@ -14,8 +14,9 @@ import customtkinter as ctk
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from project import discover_projects, get_project_meta, update_project_meta_from_config, import_analyze_to_project
-from core import (
-    load_config, save_config, get_output_dir, check_ollama_running,
+from core.config import load_config, save_config
+from core.utils import (
+    get_output_dir, get_workspace_dir, get_book_dir, check_ollama_running,
     get_available_ollama_models, read_file, write_file, count_words
 )
 from novel import (
@@ -34,7 +35,9 @@ from export import (
 from editor import edit_chapter, edit_dialogue, add_scene, EditHistory
 from reader_sim import simulate_reader, simulate_all_readers, predict_abandonment, get_readability_score
 from downloader import download_novel, detect_platform, PLATFORMS
+from tomato import download_book as tomato_download, extract_book_id, search_books
 from reverse_engineer import reverse_engineer, apply_formula_to_new_book
+from stylist import get_all_platform_styles, get_all_genre_styles, build_style_prompt, BUILTIN_PLATFORM_STYLES
 
 # shadcn/ui dark design tokens
 BG          = "#09090b"
@@ -240,8 +243,8 @@ class NovelFactoryGUI:
         # Provider dropdown
         ctk.CTkLabel(self._cloud_f, text="提供商:").pack(anchor="w")
         self.cloud_provider_var = ctk.StringVar(value=cfg["llm"].get("provider", "openai"))
-        ctk.CTkOptionMenu(self._cloud_f,
-            values=["openai", "deepseek", "dashscope", "ollama", "custom"],
+        ctk.CTkComboBox(self._cloud_f,
+            values=["openai", "deepseek", "dashscope", "ollama", "custom", "Groq", "Together AI", "硅基流动", "DeepSeek官方", "豆包", "智谱GLM"],
             variable=self.cloud_provider_var,
             command=self._on_provider_change).pack(fill="x", pady=1)
 
@@ -321,7 +324,7 @@ class NovelFactoryGUI:
         ctk.CTkEntry(self._local_f, textvariable=self.local_url_var).pack(fill="x", pady=1)
 
         # Output
-        self._card_lbl(scroll, "输出设置")
+        self._card_lbl(scroll, "主文件夹")
         oc = ctk.CTkFrame(scroll, fg_color=CARD)
         oc.pack(fill="x", pady=3)
 
@@ -329,7 +332,7 @@ class NovelFactoryGUI:
         ef = ctk.CTkFrame(oc, fg_color="transparent")
         ef.pack(fill="x", padx=15, pady=5)
         ctk.CTkEntry(ef, textvariable=self.output_dir_var,
-                     placeholder_text="留空则保存在 exe 同目录"
+                     placeholder_text="选择小说库根目录（留空则默认）"
                      ).pack(side="left", fill="x", expand=True)
         ctk.CTkButton(ef, text="浏览", command=self._browse_dir,
                       width=55).pack(side="right", padx=4)
@@ -613,8 +616,8 @@ class NovelFactoryGUI:
 
     def _import_analyze_formula(self):
         """从已拆书籍导入写作公式，注入大纲生成"""
-        from project import get_output_dir
-        output_dir = get_output_dir()
+        from core.utils import get_workspace_dir
+        output_dir = get_workspace_dir()
         # Find projects with analyze data
         import os
         candidates = []
@@ -1823,7 +1826,7 @@ class NovelFactoryGUI:
     def _get_daily_word_count(self) -> int:
         """计算 output/ 目录下各章节文件的总字数（当日）"""
         try:
-            output_dir = get_output_dir()
+            output_dir = get_workspace_dir()
         except Exception:
             return 0
         if not os.path.exists(output_dir):
@@ -2012,6 +2015,12 @@ class NovelFactoryGUI:
             "deepseek": ("https://api.deepseek.com/v1", "deepseek-chat"),
             "dashscope": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
             "ollama": ("http://localhost:11434/v1", "qwen2.5:7b"),
+            "Groq": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+            "Together AI": ("https://api.together.xyz/v1", "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+            "硅基流动": ("https://api.siliconflow.cn/v1", "Qwen/Qwen2.5-7B-Instruct"),
+            "DeepSeek官方": ("https://api.deepseek.com/v1", "deepseek-chat"),
+            "豆包": ("https://ark.cn-beijing.volces.com/api/v3", "deepseek-v4-pro"),
+            "智谱GLM": ("https://open.bigmodel.cn/api/paas/v4/", "glm-4-flash"),
         }
         if choice in templates:
             url, model = templates[choice]
@@ -2087,6 +2096,15 @@ class NovelFactoryGUI:
         }
         cfg["use_local"] = self.use_local_var.get()
         cfg["output_dir"] = self.output_dir_var.get()
+        cfg["workspace_dir"] = self.output_dir_var.get()
+        # Save novel defaults too
+        cfg["novel"] = {
+            "topic": self._topic_var.get() if hasattr(self, "_topic_var") else "",
+            "genre": self._genre_var.get() if hasattr(self, "_genre_var") else "玄幻",
+            "num_chapters": int(self._ch_var.get()) if hasattr(self, "_ch_var") else 30,
+            "words_per_chapter": int(self._wc_var.get()) if hasattr(self, "_wc_var") else 3000,
+            "platform_style": self._platform_style_var.get() if hasattr(self, "_platform_style_var") else "番茄爽文",
+        }
         save_config()
         log_target = getattr(self, 'settings_log', None) or getattr(self, 'deslop_log', None)
         if log_target:
@@ -2902,7 +2920,7 @@ class NovelFactoryGUI:
         """在 Obsidian 中打开指定目录
         
         原理：
-        1. 你的小说保存在 output_dir/书名/ 下
+        1. 你的小说保存在 主文件夹/书名/ 下
         2. 每本书是一个完整目录（正文/设定/大纲等都在里面）
         3. 点击按钮 → 调用 Obsidian.exe 打开这个目录
         4. Obsidian 将其作为 Vault 打开，你可以在 Obsidian 里：
@@ -2982,8 +3000,19 @@ class NovelFactoryGUI:
         self._dl_log = ctk.CTkTextbox(scroll, fg_color="#10121c", text_color=TEXT,
                                        font=("Consolas", 11), height=300)
         self._dl_log.pack(fill="both", expand=True)
-        self._dl_status = ctk.CTkLabel(scroll, text="就绪 — 支持番茄小说、起点、纵横等平台", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
+        self._dl_status = ctk.CTkLabel(scroll, text="就绪 — 粘贴番茄小说URL/book_id，或输入书名搜索", font=("Microsoft YaHei", 10), text_color=TEXT_DIM)
         self._dl_status.pack(anchor="w", pady=(4, 8))
+
+        # --- Search by name ---
+        ctk.CTkLabel(scroll, text="按书名搜索", font=("Microsoft YaHei", 11), text_color=TEXT_DIM).pack(anchor="w", pady=(8,2))
+        sf2 = ctk.CTkFrame(scroll, fg_color=CARD_HOVER, corner_radius=6)
+        sf2.pack(fill="x", pady=(0,4))
+        self._dl_search = ctk.CTkEntry(sf2, font=("Microsoft YaHei", 10), fg_color=CARD, text_color=TEXT, height=30,
+                                        placeholder_text="输入书名关键词搜索...")
+        self._dl_search.pack(side="left", fill="x", expand=True, padx=8, pady=4)
+        ctk.CTkButton(sf2, text="搜索", command=self._search_tomato, fg_color=ACCENT_SOFT, width=55, height=28).pack(side="right", padx=6)
+        self._dl_search_result = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._dl_search_result.pack(fill="x", pady=(0,4))
 
         self._dl_stop_flag = None
         self._dl_last_dir = ""
@@ -2992,32 +3021,116 @@ class NovelFactoryGUI:
         url = self._dl_url.get().strip()
         if not url:
             return
-        platform = detect_platform(url)
-        name = PLATFORMS.get(platform, {}).get("name", "未知")
-        self._dl_platform_label.configure(text=f"检测平台：{name}", text_color=GREEN)
+        bid = extract_book_id(url)
+        if bid:
+            self._dl_platform_label.configure(text=f"番茄小说 | book_id: {bid}", text_color=GREEN)
+        else:
+            self._dl_platform_label.configure(text="未识别到番茄小说URL", text_color=ORANGE)
 
     def _start_download(self):
-        url = self._dl_url.get().strip()
-        if not url:
-            self._dl_status.configure(text="请粘贴小说URL")
+        try:
+            url = self._dl_url.get().strip()
+            self._do_log(self._dl_log, "[DEBUG] url=" + repr(url))
+        except Exception as e:
+            self._dl_status.configure(text="错误: " + str(e))
             return
+
+        if not url:
+            self._dl_status.configure(text="请粘贴番茄小说URL或book_id")
+            return
+
         self._dl_stop_flag = threading.Event()
         self._dl_btn.configure(state="disabled", text="下载中...")
         self._dl_log.delete("1.0", "end")
-        self._dl_status.configure(text="正在连接...")
+        self._dl_status.configure(text="正在连接番茄小说...")
+        self._do_log(self._dl_log, "开始下载: " + url)
+
+        # Use Queue for thread-safe UI updates
+        import queue
+        self._dl_msg_queue = queue.Queue()
+        self._dl_url_val = url
+
+        def worker():
+            try:
+                self._dl_msg_queue.put(("log", "线程启动"))
+                result = tomato_download(url,
+                    log_callback=lambda m: self._dl_msg_queue.put(("log", m)),
+                    stop_flag=self._dl_stop_flag)
+                self._dl_msg_queue.put(("result", result))
+            except Exception as ex:
+                import traceback, io
+                buf = io.StringIO()
+                traceback.print_exc(file=buf)
+                self._dl_msg_queue.put(("error", str(ex) + "\n" + buf.getvalue()[:500]))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self._poll_dl_queue()
+
+    def _poll_dl_queue(self):
+        try:
+            while True:
+                msg = self._dl_msg_queue.get_nowait()
+                typ = msg[0]
+                if typ == "log":
+                    self._do_log(self._dl_log, str(msg[1]))
+                elif typ == "result":
+                    result = msg[1]
+                    self._do_log(self._dl_log, "下载线程返回: " + str(type(result).__name__))
+                    if isinstance(result, dict):
+                        if result.get("error"):
+                            self._dl_status.configure(text=result["error"])
+                        else:
+                            self._dl_last_dir = result.get("book_dir", "")
+                            self._dl_status.configure(
+                                text="下载完成: {} ({}章, {:,}字) | 作者: {}".format(
+                                    result.get("title","?"), result.get("downloaded",0),
+                                    result.get("total_words",0), result.get("author","?")))
+                    self._dl_btn.configure(state="normal", text="开始下载")
+                    return
+                elif typ == "error":
+                    self._do_log(self._dl_log, "[异常] " + str(msg[1]))
+                    self._dl_status.configure(text="下载出错: " + str(msg[1])[:200])
+                    self._dl_btn.configure(state="normal", text="开始下载")
+                    return
+        except queue.Empty:
+            pass
+        self.root.after(200, self._poll_dl_queue)
+    def _search_tomato(self):
+        kw = self._dl_search.get().strip()
+        if not kw:
+            return
+        for w in self._dl_search_result.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(self._dl_search_result, text=f"搜索中: {kw}...",
+                     font=("Microsoft YaHei", 10), text_color=TEXT_DIM).pack(anchor="w", pady=2)
         def task():
-            result = download_novel(url, log_callback=lambda m: self._log(self._dl_log, m),
-                                    stop_flag=self._dl_stop_flag)
-            if "error" in result:
-                self.root.after(0, lambda: self._dl_status.configure(text=result["error"], text_color=RED))
-            else:
-                self._dl_last_dir = result.get("book_dir", "")
-                self.root.after(0, lambda: self._dl_status.configure(
-                    text=f"下载完成: {result['title']} ({result['downloaded']}章, {result['total_words']:,}字) | 作者: {result.get('author', '未知')}",
-                    text_color=GREEN))
-            self.root.after(0, lambda: self._dl_btn.configure(state="normal", text="开始下载"))
+            results = search_books(kw)
+            self.root.after(0, lambda: self._show_search_results(results))
         import threading
         threading.Thread(target=task, daemon=True).start()
+
+    def _show_search_results(self, results):
+        for w in self._dl_search_result.winfo_children():
+            w.destroy()
+        if not results:
+            ctk.CTkLabel(self._dl_search_result, text="未找到结果",
+                         font=("Microsoft YaHei", 10), text_color=TEXT_DIM).pack(anchor="w", pady=2)
+            return
+        for i, book in enumerate(results[:5]):
+            row = ctk.CTkFrame(self._dl_search_result, fg_color=CARD, corner_radius=6)
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=f"{book['title']}",
+                         font=("Microsoft YaHei", 12, "bold"), text_color=TEXT).pack(side="left", padx=8, pady=4)
+            ctk.CTkLabel(row, text=f"  {book.get('author','')}",
+                         font=("Microsoft YaHei", 10), text_color=TEXT_DIM).pack(side="left")
+            ctk.CTkButton(row, text="下载", width=50, height=24,
+                          command=lambda bid=book['book_id']: self._dl_from_search(bid),
+                          fg_color=ACCENT).pack(side="right", padx=6)
+
+    def _dl_from_search(self, book_id):
+        self._dl_url.delete(0, "end")
+        self._dl_url.insert(0, book_id)
+        self._start_download()
 
     def _stop_download(self):
         if self._dl_stop_flag:

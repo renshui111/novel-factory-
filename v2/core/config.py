@@ -71,7 +71,7 @@ def _default_config() -> dict:
             "model_name": "qwen2.5-chat:14b",
             "temperature": 0.7, "max_tokens": 8192, "timeout": 600
         },
-        "use_local": False, "output_dir": "",
+        "use_local": False, "output_dir": "", "workspace_dir": "",
         "novel": {"topic": "", "genre": "\u7384\u5e7b",
                   "num_chapters": 30, "words_per_chapter": 3000}
     }

@@ -1,27 +1,21 @@
-﻿# Custom hook: force tkinter inclusion even if TclTkInfo thinks it's broken
+# Custom hook: force tkinter inclusion even if TclTkInfo thinks it is broken
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-import os
-import sys
+import os, sys
 
-# Manually locate Tcl/Tk
 tcl_path = os.path.join(sys.prefix, "tcl", "tcl8.6")
 tk_path = os.path.join(sys.prefix, "tcl", "tk8.6")
 
-# Collect all tkinter submodules
 hiddenimports = collect_submodules("tkinter")
 
-# Collect Tcl/Tk data
 datas = []
+# Use _tcl_data and _tk_data to match PyInstaller standard runtime hook
 if os.path.exists(tcl_path):
-    datas.append((tcl_path, "tcl/tcl8.6"))
+    datas.append((tcl_path, "_tcl_data"))
 if os.path.exists(tk_path):
-    datas.append((tk_path, "tcl/tk8.6"))
+    datas.append((tk_path, "_tk_data"))
 
-# Add DLLs
 binaries = []
-tcl_dll = os.path.join(sys.prefix, "DLLs", "tcl86t.dll")
-tk_dll = os.path.join(sys.prefix, "DLLs", "tk86t.dll")
-if os.path.exists(tcl_dll):
-    binaries.append((tcl_dll, "."))
-if os.path.exists(tk_dll):
-    binaries.append((tk_dll, "."))
+for dll_name in ["tcl86t.dll", "tk86t.dll"]:
+    dll_path = os.path.join(sys.prefix, "DLLs", dll_name)
+    if os.path.exists(dll_path):
+        binaries.append((dll_path, "."))

@@ -7,10 +7,12 @@ import time
 import json
 import threading
 from datetime import datetime
+
 from core import (
     llm_invoke, llm_invoke_ada, read_file, write_file,
     append_file, ensure_dir, count_words, get_output_dir
 )
+from stylist import build_style_prompt
 from prompts import (
     SETTING_GENERATION, DIRECTORY_GENERATION,
     CHAPTER_GENERATION, SUMMARY_UPDATE,
@@ -76,7 +78,7 @@ def generate_setting(topic: str, genre: str, num_chapters: int,
     if log_callback:
         log_callback("正在生成世界观设定...")
     result = llm_invoke_ada(prompt,
-        system_msg="你是一位专业的网文作家。请按照要求的格式输出。")
+        system_msg="你是一位专业的网文作家。请按照要求的格式输出。" + style_prompt)
     write_file(os.path.join(book_dir, "设定.md"), result)
     if log_callback:
         log_callback(f"设定完成 ({count_words(result)} 字)")
@@ -96,7 +98,7 @@ def generate_directory(novel_setting: str, num_chapters: int,
     if log_callback:
         log_callback("正在生成章节目录...")
     result = llm_invoke_ada(prompt,
-        system_msg="你是一位专业的网文作家。请严格按照格式输出章节目录。")
+        system_msg="你是一位专业的网文作家。请严格按照格式输出章节目录。" + style_prompt)
     write_file(os.path.join(book_dir, "目录.md"), result)
     chapters = _parse_directory(result, num_chapters)
     if log_callback:
@@ -123,7 +125,7 @@ def generate_chapter(chapter_num: int, chapter_title: str,
     if stream_callback:
         collected = []
         content = llm_invoke(prompt,
-            system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。",
+            system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。" + style_prompt,
             stream_callback=lambda c: (collected.append(c), stream_callback(c)) and None,
             stop_flag=stop_flag)
         if collected:
@@ -342,7 +344,7 @@ def generate_novel(config: dict = None,
                    stop_flag=None,
                    progress_callback=None,
                    custom_outline_path: str = None) -> dict:
-    from core import load_config
+    
     cfg = load_config()
     if config:
         cfg["novel"].update(config.get("novel", {}))
@@ -350,6 +352,11 @@ def generate_novel(config: dict = None,
             cfg["output_dir"] = config["output_dir"]
         if "use_local" in config:
             cfg["use_local"] = config["use_local"]
+    
+    # Build style prompt
+    platform_style = cfg["novel"].get("platform_style", "")
+    genre_style = cfg["novel"].get("genre", "")
+    style_prompt = build_style_prompt(platform_style=platform_style, genre_style=genre_style)
 
     topic = cfg["novel"]["topic"]
     genre = cfg["novel"]["genre"]
@@ -771,7 +778,7 @@ def continue_novel(book_dir: str, additional_chapters: int = 10,
     在已有小说后追加额外章节。
     读取已有的设定/摘要/角色档案，从下一章开始续写。
     """
-    from core import load_config, read_file, count_words, write_file
+    
 
     cfg = load_config()
     topic = cfg["novel"]["topic"]
@@ -852,11 +859,11 @@ def continue_novel(book_dir: str, additional_chapters: int = 10,
 
         if stream_callback:
             content = llm_invoke(prompt,
-                system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。",
+                system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。" + style_prompt,
                 stream_callback=stream_callback, stop_flag=stop_flag)
         else:
             content = llm_invoke_ada(prompt,
-                system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。")
+                system_msg="你是一位专业的网文作家。请直接输出章节正文，不要额外解释。" + style_prompt)
 
         if not content or content.startswith("[错误]"):
             if log_callback:
@@ -927,7 +934,7 @@ def generate_outline(topic: str, genre: str, num_chapters: int,
     if log_callback:
         log_callback("正在生成大纲...")
     result = llm_invoke_ada(prompt,
-        system_msg="你是一位专业的网文作家，擅长规划长篇小说的结构。请严格按照要求的Markdown格式输出。")
+        system_msg="你是一位专业的网文作家，擅长规划长篇小说的结构。请严格按照要求的Markdown格式输出。" + style_prompt)
     write_file(os.path.join(book_dir, "大纲.md"), result)
     if log_callback:
         log_callback(f"大纲完成 ({count_words(result)} 字)")

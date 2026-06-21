@@ -1,27 +1,16 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 
 a = Analysis(
-    ['main.py'],
-    pathex=[r'D:\项目\小说工厂\v2'],
+    ['D:\\项目\\小说工厂\\v2\\main.py'],
+    pathex=[],
     binaries=[],
-    datas=[
-    ('config.json', '.'),
-    (r'C:/Users/g/miniconda3/tcl/tcl8.6', 'tcl/tcl8.6'),
-    (r'C:/Users/g/miniconda3/tcl/tk8.6', 'tcl/tk8.6'),
-],
-    hiddenimports=[
-        'gui', 'core', 'core.config', 'core.llm', 'core.utils',
-        'novel', 'prompts', 'deslop', 'review', 'analyze',
-        'batch', 'cover', 'export', 'planner', 'project', 'dashboard', 'context', 'splitter', 'quality', 'bridge',
-        'editor', 'reader_sim', 'reverse_engineer', 'downloader',
-        'customtkinter', 'PIL', 'PIL._tkinter_finder',
-        'openai', 'requests', 'bs4', 'urllib3', '_tkinter', 'tkinter', 'tkinter.ttk', 'tkinter.font', 'tkinter.filedialog', 'tkinter.messagebox', 'tkinter.constants',
-    ],
-    hookspath=[r'D:\项目\小说工厂\v2\hooks'],
+    datas=[('D:\\项目\\小说工厂\\v2\\core', 'core'), ('D:\\项目\\小说工厂\\v2\\prompts.py', '.'), ('D:\\项目\\小说工厂\\v2\\tomato.py', '.')],
+    hiddenimports=['customtkinter', 'tkinter', 'PIL', 'requests', 'bs4', 'ebooklib', 'docx', 'urllib.parse', 'json'],
+    hookspath=['D:\\项目\\小说工厂\\v2\\hooks'],
     hooksconfig={},
-    runtime_hooks=[r'D:\项目\小说工厂\v2\hooks\rthooks\pyi_rth__tkinter.py', r'D:\项目\小说工厂\v2\hooks\rthooks\pyi_rth_tkinter_fix.py'],
-    excludes=['PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'matplotlib', 'scipy', 'pandas'],
+    runtime_hooks=[],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )

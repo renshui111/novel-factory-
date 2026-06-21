@@ -1,15 +1,34 @@
-﻿__pycache__/
+﻿# Python
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Build artifacts
 dist/
 build/
-*.spec
+NovelFactory.exe
+*.spec.bak
+
+# Local data / output
+小说库/
+output/
+crash.log
 *.log
 *.tmp
-.env
-.venv
-venv/
-*.egg-info/
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Scratch / temp scripts (never commit)
+v2/_*.py
+v2/_*.txt
+v2/_*.html
+
+# External clone
+tomato-downloader/

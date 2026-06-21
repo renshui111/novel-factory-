@@ -117,15 +117,9 @@ def download_novel(url: str, output_dir: str = "",
             log_callback(f"发现 {len(chapter_links)} 章")
         
         # Step 5: Create output directory
-        from core import ensure_dir
-        if not output_dir:
-            from core import get_output_dir
-            output_dir = get_output_dir()
-        
-        book_dir = os.path.join(output_dir, title)
-        ensure_dir(book_dir)
+        from core.utils import ensure_dir, get_book_dir
+        book_dir = get_book_dir(title)
         chapter_dir = os.path.join(book_dir, "正文")
-        ensure_dir(chapter_dir)
         
         # Step 6: Download chapters
         total_words = 0
