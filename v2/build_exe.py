@@ -1,43 +1,19 @@
-import pathlib, os, sys
+import os
+import sys
 
-_orig_resolve = pathlib.Path.resolve
-def safe_resolve(self, strict=False):
-    try: return _orig_resolve(self, strict)
-    except Exception: return self
-pathlib.Path.resolve = safe_resolve
-
-_orig_is_dir = pathlib.Path.is_dir
-def safe_is_dir(self):
-    try: return _orig_is_dir(self)
-    except Exception: return False
-pathlib.Path.is_dir = safe_is_dir
-
-_orig_stat = pathlib.Path.stat
-def safe_stat(self):
-    try: return _orig_stat(self)
-    except Exception: return os.stat_result((0,)*10)
-pathlib.Path.stat = safe_stat
-
-_orig_exists = pathlib.Path.exists
-def safe_exists(self):
-    try: return _orig_exists(self)
-    except Exception: return False
-pathlib.Path.exists = safe_exists
-
-_orig_is_file = pathlib.Path.is_file
-def safe_is_file(self):
-    try: return _orig_is_file(self)
-    except Exception: return False
-pathlib.Path.is_file = safe_is_file
+# 相对脚本所在目录计算路径，避免硬编码绝对路径（中文路径换机器即失效）
+ROOT = os.path.dirname(os.path.abspath(__file__))
+V2 = os.path.join(ROOT, "v2")
+SEP = ";" if sys.platform == "win32" else ":"
 
 from PyInstaller.__main__ import run as run_pyi
 sys.argv = [
     "pyinstaller",
     "--onefile", "--windowed",
     "--name", "NovelFactory",
-    "--add-data", r"D:\项目\小说工厂\v2\core;core",
-    "--add-data", r"D:\项目\小说工厂\v2\prompts.py;.",
-    "--add-data", r"D:\项目\小说工厂\v2\tomato.py;.",
+    "--add-data", os.path.join(V2, "core") + SEP + "core",
+    "--add-data", os.path.join(V2, "prompts.py") + SEP + ".",
+    "--add-data", os.path.join(V2, "tomato.py") + SEP + ".",
     "--hidden-import", "customtkinter",
     "--hidden-import", "tkinter",
     "--hidden-import", "PIL",
@@ -47,11 +23,11 @@ sys.argv = [
     "--hidden-import", "docx",
     "--hidden-import", "urllib.parse",
     "--hidden-import", "json",
-    "--additional-hooks-dir", r"D:\项目\小说工厂\v2\hooks",
+    "--additional-hooks-dir", os.path.join(V2, "hooks"),
     "--noconfirm", "--clean",
-    "--distpath", r"D:\项目\小说工厂\v2\dist",
-    "--workpath", r"D:\项目\小说工厂\v2\build",
-    "--specpath", r"D:\项目\小说工厂\v2",
-    r"D:\项目\小说工厂\v2\main.py",
+    "--distpath", os.path.join(V2, "dist"),
+    "--workpath", os.path.join(V2, "build"),
+    "--specpath", V2,
+    os.path.join(V2, "main.py"),
 ]
 run_pyi()

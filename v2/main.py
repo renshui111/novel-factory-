@@ -25,8 +25,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # 写崩溃日志
-        log_path = os.path.join(base_dir, "crash.log")
+        # frozen 时 _MEIPASS 只读，crash log 写到 exe 同级目录
+        log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else base_dir
+        log_path = os.path.join(log_dir, "crash.log")
         with open(log_path, "w", encoding="utf-8") as f:
             f.write(f"NovelFactory 崩溃报告\n")
             f.write(f"{'='*60}\n")
