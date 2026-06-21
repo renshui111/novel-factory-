@@ -465,9 +465,7 @@ def generate_novel(config: dict = None,
 
     def _submit_chapter(ch, current_summary):
         """提交单章生成任务"""
-        route = _route_model('chapter', cfg)
-        if route.get('use_local') != cfg.get('use_local', False):
-            cfg['use_local'] = route['use_local']
+        # use_local 由 generate_novel 开头的 config 决定，避免多线程读写共享 cfg 造成 race
         return generate_chapter(
             ch['num'], ch['title'],
             novel_setting, directory_text, current_summary,
