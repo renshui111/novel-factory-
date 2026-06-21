@@ -28,12 +28,10 @@ CHECKPOINT_FILE = "checkpoint.json"
 # 准备
 # ═══════════════════════════════════════════════════════════
 def prepare_book_dir(topic: str) -> str:
-    dir_name = re.sub(r'[\\/:*?"<>|]', '', topic)[:30].strip()
-    if not dir_name:
-        dir_name = f"novel_{int(time.time())}"
-    book_dir = os.path.join(get_output_dir(), dir_name)
-    ensure_dir(book_dir)
-    ensure_dir(os.path.join(book_dir, "正文"))
+    # 统一走 core.utils.get_book_dir，sanitize 规则与 project 模块一致
+    if not topic or not topic.strip():
+        topic = f"novel_{int(time.time())}"
+    return get_book_dir(topic)
     return book_dir
 
 

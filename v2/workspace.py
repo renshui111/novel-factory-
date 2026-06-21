@@ -9,18 +9,9 @@ from datetime import datetime
 
 
 def get_workspace_dir() -> str:
-    """获取主工作区目录"""
-    from core import load_config
-    cfg = load_config()
-    d = cfg.get("workspace_dir", "")
-    if not d:
-        # Fallback to output_dir for backward compat
-        d = cfg.get("output_dir", "")
-    if not d:
-        from core.config import _get_app_dir
-        d = os.path.join(_get_app_dir(), "小说工作区")
-    os.makedirs(d, exist_ok=True)
-    return d
+    """获取主工作区目录（委托给 core.utils，统一默认目录名）"""
+    from core.utils import get_workspace_dir as _ws
+    return _ws()
 
 
 def get_active_category() -> str:
