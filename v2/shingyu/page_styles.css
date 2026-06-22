@@ -1,0 +1,9 @@
+@page {
+  margin-bottom: 5pt;
+  margin-top: 5pt;
+}
+@font-face {
+  font-family: "HarmonyOS Sans SC";
+  panose-1: 0 0 5 0 0 0 0 0 0 0;
+  src: url(../fonts/HarmonyOS_Sans_SC_Regular.ttf);
+}

@@ -1,19 +1,28 @@
-import os
-import sys
+# -*- coding: utf-8 -*-
+"""build_exe.py - 一键打包 NovelFactory.exe
 
-# 相对脚本所在目录计算路径，避免硬编码绝对路径（中文路径换机器即失效）
-ROOT = os.path.dirname(os.path.abspath(__file__))
-V2 = os.path.join(ROOT, "v2")
-SEP = ";" if sys.platform == "win32" else ":"
+在本机 Python 环境运行:
+    pip install pyinstaller customtkinter requests Pillow
+    python build_exe.py
+
+输出: dist/NovelFactory.exe
+"""
+import os, sys
+
+ROOT = os.path.dirname(os.path.abspath(__file__))  # v2/
+SEP = ";" if os.name == "nt" else ":"
 
 from PyInstaller.__main__ import run as run_pyi
+
 sys.argv = [
     "pyinstaller",
     "--onefile", "--windowed",
     "--name", "NovelFactory",
-    "--add-data", os.path.join(V2, "core") + SEP + "core",
-    "--add-data", os.path.join(V2, "prompts.py") + SEP + ".",
-    "--add-data", os.path.join(V2, "tomato.py") + SEP + ".",
+    "--add-data", os.path.join(ROOT, "core") + SEP + "core",
+    "--add-data", os.path.join(ROOT, "prompts.py") + SEP + ".",
+    "--add-data", os.path.join(ROOT, "tomato.py") + SEP + ".",
+    "--add-data", os.path.join(ROOT, "stylist.py") + SEP + ".",
+    "--add-data", os.path.join(ROOT, "charset.json") + SEP + ".",
     "--hidden-import", "customtkinter",
     "--hidden-import", "tkinter",
     "--hidden-import", "PIL",
@@ -21,13 +30,11 @@ sys.argv = [
     "--hidden-import", "bs4",
     "--hidden-import", "ebooklib",
     "--hidden-import", "docx",
-    "--hidden-import", "urllib.parse",
-    "--hidden-import", "json",
-    "--additional-hooks-dir", os.path.join(V2, "hooks"),
+    "--additional-hooks-dir", os.path.join(ROOT, "hooks"),
     "--noconfirm", "--clean",
-    "--distpath", os.path.join(V2, "dist"),
-    "--workpath", os.path.join(V2, "build"),
-    "--specpath", V2,
-    os.path.join(V2, "main.py"),
+    "--distpath", os.path.join(ROOT, "dist"),
+    "--workpath", os.path.join(ROOT, "build"),
+    "--specpath", ROOT,
+    os.path.join(ROOT, "main.py"),
 ]
 run_pyi()
